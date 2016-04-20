@@ -32,7 +32,10 @@ extern Matrix matrix_para_dev_batch_hidden_gene;
 
 
 
-//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
+// para
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+extern vector<float *> d_list_para_cis_gene;
+//Matrix matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 extern float * d_para_snp_cellenv;
 //vector<Matrix> cube_para_dev_cellenv_gene --> float * d_para_dev_cellenv_gene
 extern vector<float *> d_list_para_cellenv_gene;
@@ -41,6 +44,11 @@ extern float * d_para_batch_batch_hidden;
 //Matrix matrix_para_dev_batch_hidden_gene --> float * d_para_dev_batch_hidden_gene
 extern float * d_para_batch_hidden_gene;
 
+
+// para dev
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+extern vector<float *> d_list_para_dev_cis_gene;
+//Matrix matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 extern float * d_para_dev_snp_cellenv;
 //vector<Matrix> cube_para_dev_cellenv_gene --> float * d_para_dev_cellenv_gene
 extern vector<float *> d_list_para_dev_cellenv_gene;
@@ -50,6 +58,9 @@ extern float * d_para_dev_batch_batch_hidden;
 extern float * d_para_dev_batch_hidden_gene;
 
 
+// temp
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+extern float * d_temp_cis_gene;
 //matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 extern float * d_temp_snp_cellenv;
 //vector<Matrix> cube_para_dev_cellenv_gene --> float * d_para_dev_cellenv_gene
@@ -65,12 +76,19 @@ extern int * d_etissue_index_p;
 extern float * d_snp;			// real data
 extern float * d_expr;			// real data
 extern float * d_gene_rpkm_exp;  // with length "num_gene"
+extern float * d_gene_rpkm_exp_cis;		// with length "num_gene"
 extern float * d_gene_rpkm_exp_cellenv;  	// with length "num_gene"
 extern float * d_gene_rpkm_exp_batch;  	// with length "num_gene"
 extern float * d_error_list;				// with length "num_gene"
 extern float * d_cellenv_hidden_var;  // with length "num_cellenv"
 extern float * d_batch_var;  // with length "num_batch"
 extern float * d_batch_hidden_var;  // with length "num_batch_hidden"
+// for cis- range query
+extern long int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
+extern long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene
+extern long int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
+extern long int * d_cis_para_index1;			// with length num_para_cis (below)
+extern long int num_para_cis;				// total amount of cis- parameters (across all genes)
 
 
 

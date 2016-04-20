@@ -57,10 +57,13 @@ Matrix matrix_para_dev_batch_hidden_gene;
 
 
 
-// GPU global variables (whenever it comes to d_xxx (GPU device memory), it's an array other than matrix)
+//======== GPU global variables (whenever it comes to d_xxx (GPU device memory), it's an array other than matrix)
+// para
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+vector<float *> d_list_para_cis_gene;
 //matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 float * d_para_snp_cellenv;
-//vector<Matrix> cube_para_dev_cellenv_gene --> float * d_para_dev_cellenv_gene
+//vector<Matrix> cube_para_dev_cellenv_gene --> vector<float *> d_list_para_dev_cellenv_gene
 vector<float *> d_list_para_cellenv_gene;
 //Matrix matrix_para_dev_batch_batch_hidden --> float * d_para_dev_batch_batch_hidden
 float * d_para_batch_batch_hidden;
@@ -68,6 +71,9 @@ float * d_para_batch_batch_hidden;
 float * d_para_batch_hidden_gene;
 
 
+// para dev
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+vector<float *> d_list_para_dev_cis_gene;
 //matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 float * d_para_dev_snp_cellenv;
 //vector<Matrix> cube_para_dev_cellenv_gene --> float * d_para_dev_cellenv_gene
@@ -79,6 +85,8 @@ float * d_para_dev_batch_hidden_gene;
 
 
 // temp space for Matrix Multiplication
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+float * d_temp_cis_gene;
 //matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 float * d_temp_snp_cellenv;
 //vector<Matrix> cube_para_dev_cellenv_gene --> float * d_para_dev_cellenv_gene
@@ -95,12 +103,20 @@ int * d_etissue_index_p;
 float * d_snp;						// real data
 float * d_expr;						// real data
 float * d_gene_rpkm_exp;  			// with length "num_gene"
+float * d_gene_rpkm_exp_cis;		// with length "num_gene"
 float * d_gene_rpkm_exp_cellenv;  	// with length "num_gene"
 float * d_gene_rpkm_exp_batch;  	// with length "num_gene"
 float * d_error_list;				// with length "num_gene"
 float * d_cellenv_hidden_var;  		// with length "num_cellenv"
 float * d_batch_var;  				// with length "num_batch"
 float * d_batch_hidden_var;  		// with length "num_batch_hidden"
+// for cis- range query
+long int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
+long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene
+long int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
+long int * d_cis_para_index1;			// with length num_para_cis (below)
+long int num_para_cis;				// total amount of cis- parameters (across all genes)
+
 
 
 
@@ -702,8 +718,23 @@ void GPU_init()
 	//================ GPU memory build-up ================
 	//=====================================================
 	//==== para_dev
-	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
-	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
+	//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_dev_cis_gene;
+	long int dimension = 0;
+	long int dimension1 = cube_para_dev_cis_gene[0].get_dimension1();
+	for(long int i=0; i<dimension1; i++)
+	{
+		dimension += cube_para_dev_cis_gene[0].get_dimension2(i);
+	}
+	num_para_cis = dimension;
+    for(int i=0; i<num_etissue; i++)
+    {
+		float * d_para_dev_cis_gene;
+	    checkCudaErrors(cudaMalloc(&d_para_dev_cis_gene, dimension*sizeof(float)));
+	    d_list_para_dev_cis_gene.push_back(d_para_dev_cis_gene);
+    }
+
+	//Matrix matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
+	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
     //float * d_para_dev_snp_cellenv;			// whenever it comes to d_xxx (GPU device memory), it's an array other than matrix
     checkCudaErrors(cudaMalloc(&d_para_dev_snp_cellenv, (dimension1*dimension2)*sizeof(float)));
@@ -713,6 +744,7 @@ void GPU_init()
     	long int pos_start = i * dimension2;
     	checkCudaErrors(cudaMemcpy( (d_para_dev_snp_cellenv + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
     }
+
 	//vector<Matrix> cube_para_dev_cellenv_gene --> vector<float *> d_list_para_dev_cellenv_gene
 	dimension1 = cube_para_dev_cellenv_gene[0].get_dimension1();
 	dimension2 = cube_para_dev_cellenv_gene[0].get_dimension2();
@@ -729,6 +761,7 @@ void GPU_init()
 	    }
 	    d_list_para_dev_cellenv_gene.push_back(d_para_dev_cellenv_gene);
     }
+
 	//Matrix matrix_para_dev_batch_batch_hidden --> float * d_para_dev_batch_batch_hidden
 	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
 	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
@@ -740,6 +773,7 @@ void GPU_init()
     	long int pos_start = i * dimension2;
     	checkCudaErrors(cudaMemcpy( (d_para_dev_batch_batch_hidden + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
     }
+
 	//Matrix matrix_para_dev_batch_hidden_gene --> float * d_para_dev_batch_hidden_gene
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
@@ -755,6 +789,25 @@ void GPU_init()
 
 
     //==== para
+	//vector<Matrix_imcomp> cube_para_cis_gene--> vector<float *> d_list_para_cis_gene;
+    for(int i=0; i<num_etissue; i++)
+    {
+		float * d_para_cis_gene;
+	    checkCudaErrors(cudaMalloc(&d_para_cis_gene, num_para_cis*sizeof(float)));
+	    d_list_para_cis_gene.push_back(d_para_cis_gene);
+
+		long int dimension1 = cube_para_cis_gene[i].get_dimension1();
+		long int pos_start = 0;
+		for(long int j=0; j<dimension1; j++)
+		{
+			long int amount = cube_para_cis_gene[i].get_dimension2(j);
+			float * x = cube_para_cis_gene[i].get_list(j);
+			checkCudaErrors(cudaMemcpy( (d_list_para_cis_gene[i] + pos_start), x, amount*sizeof(float), cudaMemcpyHostToDevice));
+			pos_start += amount;
+		}
+
+    }
+
 	//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
@@ -766,6 +819,7 @@ void GPU_init()
 		long int pos_start = i * dimension2;
 		checkCudaErrors(cudaMemcpy( (d_para_snp_cellenv + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
     }
+
 	//vector<Matrix> cube_para_cellenv_gene --> vector<float *> d_list_para_cellenv_gene
 	dimension1 = cube_para_cellenv_gene[0].get_dimension1();
 	dimension2 = cube_para_cellenv_gene[0].get_dimension2();
@@ -782,6 +836,7 @@ void GPU_init()
 	    }
 	    d_list_para_cellenv_gene.push_back(d_para_cellenv_gene);
     }
+
 	//Matrix matrix_para_batch_batch_hidden --> float * d_para_batch_batch_hidden
 	dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
 	dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
@@ -793,6 +848,7 @@ void GPU_init()
     	long int pos_start = i * dimension2;
     	checkCudaErrors(cudaMemcpy( (d_para_batch_batch_hidden + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
     }
+
 	//Matrix matrix_para_batch_hidden_gene --> float * d_para_batch_hidden_gene
 	dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_batch_hidden_gene.get_dimension2();
@@ -809,6 +865,9 @@ void GPU_init()
 
     //==== temp
     // temp space for Matrix Multiplication
+	//float * d_temp_cis_gene;
+	checkCudaErrors(cudaMalloc(&d_temp_cis_gene, num_para_cis*sizeof(float)));
+
 	//float * d_temp_snp_cellenv;
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
@@ -845,6 +904,9 @@ void GPU_init()
 	//==== float * d_gene_rpkm_exp
 	checkCudaErrors(cudaMalloc(&d_gene_rpkm_exp, num_gene*sizeof(float)));
 
+	//==== float * d_gene_rpkm_exp_cis;		// with length "num_gene"
+	checkCudaErrors(cudaMalloc(&d_gene_rpkm_exp_cis, num_gene*sizeof(float)));
+
 	//==== float * d_gene_rpkm_exp_cellenv
 	checkCudaErrors(cudaMalloc(&d_gene_rpkm_exp_cellenv, num_gene*sizeof(float)));
 
@@ -863,6 +925,84 @@ void GPU_init()
 	//==== float * d_batch_hidden_var
 	checkCudaErrors(cudaMalloc(&d_batch_hidden_var, num_batch_hidden*sizeof(float)));
 
+
+	//==== for cis- range query
+	//int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
+	//int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
+	long int * temp_d_cis_para_start = (long int *)malloc(num_gene*sizeof(long int));
+	long int * temp_d_cis_para_amount = (long int *)malloc(num_gene*sizeof(long int));
+	dimension1 = cube_para_cis_gene[0].get_dimension1();
+	long int pos_start = 0;
+	for(long int i=0; i<dimension1; i++)
+	{
+		temp_d_cis_para_start[i] = pos_start;
+		long int amount = cube_para_cis_gene[0].get_dimension2(i);
+		pos_start += amount;
+		temp_d_cis_para_amount[i] = amount;
+	}
+	checkCudaErrors(cudaMalloc(&d_cis_para_start, num_gene*sizeof(long int)));
+	checkCudaErrors(cudaMalloc(&d_cis_para_amount, num_gene*sizeof(long int)));
+	checkCudaErrors(cudaMemcpy( d_cis_para_start, temp_d_cis_para_start, num_gene*sizeof(long int), cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy( d_cis_para_amount, temp_d_cis_para_amount, num_gene*sizeof(long int), cudaMemcpyHostToDevice));
+	free(temp_d_cis_para_start);
+	free(temp_d_cis_para_amount);
+
+	//long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene
+	long int * temp_d_cis_snp_start = (long int *)malloc(num_gene*sizeof(long int));
+	dimension1 = cube_para_cis_gene[0].get_dimension1();
+	for(long int i=0; i<dimension1; i++)
+	{
+		long int chr = cube_para_cis_gene[0].get_chr(i);
+		long int pos_start = cube_para_cis_gene[0].get_sst(i);
+		for(int j=0; j<chr-1; j++)
+		{
+			pos_start += snp_name_list[j].size();
+
+		}
+		temp_d_cis_snp_start[i] = pos_start;
+	}
+	checkCudaErrors(cudaMalloc(&d_cis_snp_start, num_gene*sizeof(long int)));
+	checkCudaErrors(cudaMemcpy( d_cis_snp_start, temp_d_cis_snp_start, num_gene*sizeof(long int), cudaMemcpyHostToDevice));
+	free(temp_d_cis_snp_start);
+
+	//==== long int * d_cis_para_index1;			// with length num_para_cis (below)
+    checkCudaErrors(cudaMalloc(&d_cis_para_index1, num_para_cis*sizeof(long int)));
+	dimension1 = cube_para_cis_gene[0].get_dimension1();
+	pos_start = 0;
+	for(long int j=0; j<dimension1; j++)
+	{
+		long int amount = cube_para_cis_gene[0].get_dimension2(j);
+		long int * x = (long int *)malloc(amount*sizeof(long int));
+		for(long int i=0; i<amount; i++)
+		{
+			x[i] = j;
+		}
+		checkCudaErrors(cudaMemcpy( (d_cis_para_index1 + pos_start), x, amount*sizeof(long int), cudaMemcpyHostToDevice));
+		pos_start += amount;
+	}
+
+
+
+
+//(Apr.20) for cis- GPU, what's to be added
+/*
+// copy
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+vector<float *> d_list_para_dev_cis_gene;
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+vector<float *> d_list_para_cis_gene;
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+float * d_temp_cis_gene;
+// for cis- range query
+long int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
+long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene
+long int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
+long int num_para_cis;				// total amount of cis- parameters (across all genes)
+*/
+
+
+
+
 }
 
 
@@ -875,6 +1015,13 @@ void GPU_release()
 	//================ GPU data retrieval ================
 	//====================================================
 	//==== para_dev
+	//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_dev_cis_gene;
+	for(int i=0; i<num_etissue; i++)
+	{
+		float * d_para_dev_cis_gene = d_list_para_dev_cis_gene[i];
+	    checkCudaErrors(cudaFree(d_para_dev_cis_gene));
+	}
+
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
@@ -885,6 +1032,7 @@ void GPU_release()
 		checkCudaErrors(cudaMemcpy(x, (d_para_dev_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
     }
     checkCudaErrors(cudaFree(d_para_dev_snp_cellenv));
+
 	//vector<Matrix> cube_para_dev_cellenv_gene --> <float *> d_list_para_dev_cellenv_gene
 	dimension1 = cube_para_dev_cellenv_gene[0].get_dimension1();
 	dimension2 = cube_para_dev_cellenv_gene[0].get_dimension2();
@@ -899,6 +1047,7 @@ void GPU_release()
 	    }
 	    checkCudaErrors(cudaFree(d_para_dev_cellenv_gene));
 	}
+
 	//Matrix matrix_para_dev_batch_batch_hidden --> float * d_para_dev_batch_batch_hidden
 	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
 	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
@@ -909,6 +1058,7 @@ void GPU_release()
 		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
     }
     checkCudaErrors(cudaFree(d_para_dev_batch_batch_hidden));
+
 	//Matrix matrix_para_dev_batch_hidden_gene --> float * d_para_dev_batch_hidden_gene
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
@@ -921,7 +1071,24 @@ void GPU_release()
     checkCudaErrors(cudaFree(d_para_dev_batch_hidden_gene));
 
 
+
     //==== para
+	//vector<Matrix_imcomp> cube_para_cis_gene--> vector<float *> d_list_para_cis_gene;
+    for(int i=0; i<num_etissue; i++)
+    {
+		float * d_para_cis_gene = d_list_para_cis_gene[i];
+		long int dimension1 = cube_para_cis_gene[i].get_dimension1();
+		long int pos_start = 0;
+		for(long int j=0; j<dimension1; j++)
+		{
+			long int amount = cube_para_cis_gene[i].get_dimension2(j);
+			float * x = cube_para_cis_gene[i].get_list(j);
+			checkCudaErrors(cudaMemcpy(x, (d_para_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+			pos_start += amount;
+		}
+	    checkCudaErrors(cudaFree(d_para_cis_gene));
+    }
+
 	//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
@@ -972,6 +1139,9 @@ void GPU_release()
 
     //==== para temp
     // temp space for Matrix Multiplication
+	//float * d_temp_cis_gene;
+	checkCudaErrors(cudaFree(d_temp_cis_gene));
+
 	//float * d_temp_snp_cellenv;
     checkCudaErrors(cudaFree(d_temp_snp_cellenv));
 
@@ -1000,6 +1170,9 @@ void GPU_release()
 	//==== float * d_gene_rpkm_exp
     checkCudaErrors(cudaFree(d_gene_rpkm_exp));
 
+	//==== float * d_gene_rpkm_exp_cis;		// with length "num_gene"
+    checkCudaErrors(cudaFree(d_gene_rpkm_exp_cis));
+
 	//==== float * d_gene_rpkm_exp_cellenv
     checkCudaErrors(cudaFree(d_gene_rpkm_exp_cellenv));
 
@@ -1017,6 +1190,20 @@ void GPU_release()
 
 	//==== float * d_batch_hidden_var
     checkCudaErrors(cudaFree(d_batch_hidden_var));
+
+	//==== for cis- range query
+	//int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
+	//int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
+	checkCudaErrors(cudaFree(d_cis_para_start));
+	checkCudaErrors(cudaFree(d_cis_para_amount));
+
+	//long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene
+	checkCudaErrors(cudaFree(d_cis_snp_start));
+
+	//==== long int * d_cis_para_index1;			// with length num_para_cis (below)
+	checkCudaErrors(cudaFree(d_cis_para_index1));
+
+
 
 
 

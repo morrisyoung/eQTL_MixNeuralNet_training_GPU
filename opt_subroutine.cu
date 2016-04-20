@@ -46,6 +46,24 @@ using namespace std;
 
 
 
+//(Apr.20) for cis- GPU, what's to be added
+/*
+// copy
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+vector<float *> d_list_para_dev_cis_gene;
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+vector<float *> d_list_para_cis_gene;
+//vector<Matrix_imcomp> cube_para_dev_cis_gene--> vector<float *> d_list_para_cis_gene;
+float * d_temp_cis_gene;
+// for cis- range query
+long int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
+long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene
+long int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
+long int num_para_cis;				// total amount of cis- parameters (across all genes)
+*/
+
+
+
 
 
 // forward and backward propagation for one mini-batch
@@ -55,9 +73,23 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 	int etissue_index = etissue_index_map[etissue];
 
+	/*
 	//******************* initialize all the parameter derivatives (as 0) *******************
+	//===============================================
+	//================ CPU computing ================
+	//===============================================
 	// vector<Matrix_imcomp> cube_para_dev_cis_gene;
 	cube_para_dev_cis_gene[etissue_index].clean();
+	*/
+
+
+
+	//===============================================
+	//================ GPU computing ================
+	//===============================================
+	gpu_clean<<<( num_para_cis+255 )/256 , 256 >>>( num_para_cis , d_list_para_dev_cis_gene[etissue_index]);
+
+
 
 	/*
 	// Matrix matrix_para_dev_snp_cellenv;
@@ -72,8 +104,6 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	// Matrix matrix_para_dev_batch_hidden_gene;
 	matrix_para_dev_batch_hidden_gene.clean();
 	*/
-
-
 
 	//===============================================
 	//================ GPU computing ================
@@ -159,14 +189,14 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 			pos_start += dimension;
 		}
 
-		// //==== float * d_expr
-		// float * expr_list = (float *)malloc(num_gene*sizeof(float));
-		// for(int i=0; i<num_gene; i++)
-		// {
-		// 	expr_list[i] = eQTL_tissue_rep[etissue][esample][i];
-		// }
-		// checkCudaErrors(cudaMemcpy( d_expr, expr_list, num_gene*sizeof(float), cudaMemcpyHostToDevice));
-		// free(expr_list);
+		//==== float * d_expr
+		float * expr_list = (float *)malloc(num_gene*sizeof(float));
+		for(int i=0; i<num_gene; i++)
+		{
+			expr_list[i] = eQTL_tissue_rep[etissue][esample][i];
+		}
+		checkCudaErrors(cudaMemcpy( d_expr, expr_list, num_gene*sizeof(float), cudaMemcpyHostToDevice));
+		free(expr_list);
 
 		//==== float * d_batch_var
 		checkCudaErrors(cudaMemcpy( d_batch_var, batch_var, num_batch*sizeof(float), cudaMemcpyHostToDevice));
@@ -247,8 +277,22 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	// 1. average the derivatives calculated from previous steps
 	// 2. will add the derivatives due to regularization in the next part
 	cout << "aggregation of this mini-batch..." << endl;
+
+	/*
+	//===============================================
+	//================ CPU computing ================
+	//===============================================
 	// vector<Matrix_imcomp> cube_para_dev_cis_gene;		// NOTE: won't transform this into GPU code
 	cube_para_dev_cis_gene[etissue_index].scale( 1.0 / batch_size );
+	*/
+
+
+
+	//===============================================
+	//================ GPU computing ================
+	//===============================================
+	gpu_scale<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis , 1.0 / batch_size, d_list_para_dev_cis_gene[etissue_index]);
+
 
 
 	/*
@@ -655,11 +699,31 @@ void forward_backward(int etissue_index,
 
 
 	// ****************************** [part1] cis- *********************************
+
+	/*
+	//===============================================
+	//================ CPU computing ================
+	//===============================================
 	// for cis-, two issues:
 	// 1. if this is a XYMT gene, we don't have signal from it's cis- SNPs (not consider currently);
 	// 2. we use (gene_cis_index[gene].second - gene_cis_index[gene].first + 1) as the length of the cis- parameter array
 	float * expr_con_pointer_cis = (float *)calloc( num_gene, sizeof(float) );
 	multi_array_matrix_imcomp(dosage_list_pointer, cube_para_cis_gene[etissue_index], expr_con_pointer_cis);
+	*/
+
+
+	//===============================================
+	//================ GPU computing ================
+	//===============================================
+	//== multiply the input to the matrix
+	gpu_matrix_mul_cis_mul<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis, num_gene, d_snp, d_list_para_cis_gene[etissue_index], d_temp_cis_gene,\
+							d_cis_para_start, d_cis_para_amount, d_cis_snp_start, d_cis_para_index1);
+	//== sum matrix
+	gpu_matrix_mul_cis_add<<<(num_gene + 255) / 256 , 256 >>>( num_gene, d_temp_cis_gene, d_gene_rpkm_exp_cis,\
+							d_cis_para_start, d_cis_para_amount, d_cis_snp_start);
+
+
+
 
 
 	// // DEBUG mode: let's save the signal from all the three pathways
@@ -669,7 +733,7 @@ void forward_backward(int etissue_index,
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@Time used totally is %f seconds.\n", diff);
 
 
 	//============== timing starts ================
@@ -732,7 +796,7 @@ void forward_backward(int etissue_index,
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@@Time used totally is %f seconds.\n", diff);
 
 	//============== timing starts ================
 	gettimeofday(&time_start, NULL);
@@ -794,7 +858,7 @@ void forward_backward(int etissue_index,
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@@@Time used totally is %f seconds.\n", diff);
 
 
 
@@ -824,6 +888,7 @@ void forward_backward(int etissue_index,
 	}
 	*/
 
+	/*
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
@@ -845,6 +910,17 @@ void forward_backward(int etissue_index,
 		error_list[i] = expr_con_pointer[i] - (*expr_list_pointer)[i];
 	}
     checkCudaErrors(cudaMemcpy( d_error_list, error_list, num_gene*sizeof(float), cudaMemcpyHostToDevice));
+    */
+
+	//===================================================
+	//================ GPU computing (2) ================
+	//===================================================
+	// 1. merge the three in GPU;
+	// 2. calculate the error in GPU
+	gpu_merge_list_3<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_gene_rpkm_exp_cis, d_gene_rpkm_exp_cellenv, d_gene_rpkm_exp_batch);
+	gpu_error_cal<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_error_list, d_gene_rpkm_exp_cis, d_expr);
+
+
 
 
 
@@ -852,7 +928,7 @@ void forward_backward(int etissue_index,
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@@@@Time used totally is %f seconds.\n", diff);
 
 
 
@@ -876,13 +952,27 @@ void forward_backward(int etissue_index,
 	//========================================================================
 	//========================================================================
 	// *********************** [part1] cis- ************************
+	/*
+	//===============================================
+	//================ CPU computing ================
+	//===============================================
 	backward_error_prop_direct_imcomp(matrix_imcomp_para_dev_cis_gene, error_list, dosage_list_pointer);
+	*/
+
+
+	//===============================================
+	//================ GPU computing ================
+	//===============================================
+	gpu_backprop_cis<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis, num_gene, d_list_para_dev_cis_gene[etissue_index], d_error_list, d_snp,\
+						d_cis_para_start, d_cis_para_amount, d_cis_snp_start, d_cis_para_index1);
+
+
 
 
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@@@@@Time used totally is %f seconds.\n", diff);
 
 
 	//============== timing starts ================
@@ -929,7 +1019,7 @@ void forward_backward(int etissue_index,
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@@@@@@Time used totally is %f seconds.\n", diff);
 
 
 	//============== timing starts ================
@@ -975,12 +1065,12 @@ void forward_backward(int etissue_index,
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("@@@@@@@Time used totally is %f seconds.\n", diff);
 
 
 
 
-	free(error_list);
+	//free(error_list);
 
 	return;
 }
@@ -1095,8 +1185,18 @@ void regularization(int etissue_index)
 	//===================================== part#1 =====================================
 	// 1. sparsity of cis- regulation, accompanied by ridge regression, achieved by elastic-net tuned by the prior number, (and the distance prior)
 	// TODO: not yet integrated the distance prior information
+	/*
+	//=======================================
+	//============ CPU Computing ============
+	//=======================================
 	para_penalty_cis(cube_para_cis_gene[etissue_index], cube_para_dev_cis_gene[etissue_index], prior_tissue_vector[etissue_index], lambda_lasso, lambda_ridge, sigma);
+	*/
 
+
+	//=======================================
+	//============ GPU Computing ============
+	//=======================================
+	gpu_penalty_cis<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis , d_list_para_cis_gene[etissue_index], d_list_para_dev_cis_gene[etissue_index], lambda_lasso, lambda_ridge, sigma);
 
 
 
@@ -1216,8 +1316,18 @@ void gradient_descent(int etissue_index)
 
 	//============================================ pathway#1 ================================================
 	//====================== cube_para_cis_gene ==========================
+	/*
+	//=======================================
+	//============ CPU Computing ============
+	//=======================================
 	para_gradient_descent_cis(cube_para_cis_gene[etissue_index], cube_para_dev_cis_gene[etissue_index], rate_learner);
+	*/
 
+
+	//=======================================
+	//============ GPU Computing ============
+	//=======================================
+	gpu_gd<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis , d_list_para_cis_gene[etissue_index], d_list_para_dev_cis_gene[etissue_index], rate_learner);
 
 
 

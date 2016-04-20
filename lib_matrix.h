@@ -320,6 +320,12 @@ class Matrix_imcomp
 			return matrix[pos1][pos2];
 		}
 
+		// get element
+		float * get_list(long int pos)
+		{
+			return matrix[pos];
+		}
+
 		// assign
 		void assign(long int pos1, long int pos2, float value)
 		{
