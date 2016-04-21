@@ -84,11 +84,19 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+
+
+	//============== timing starts ================
+    struct timeval time_start;
+    struct timeval time_end;
+    double diff;
+    gettimeofday(&time_start, NULL);
+
+
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
 	gpu_clean<<<( num_para_cis+255 )/256 , 256 >>>( num_para_cis , d_list_para_dev_cis_gene[etissue_index]);
-
 
 
 	/*
@@ -131,6 +139,11 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	gpu_clean<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_dev_batch_hidden_gene);
 
 
+	//============== timing ends ================
+	gettimeofday(&time_end, NULL);
+	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+	printf("Time used totally is %f seconds.\n", diff);
+
 
 
 
@@ -139,6 +152,26 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	cout << "we are entering a new mini-batch..." << endl;
 	for(int count=0; count<batch_size; count++)
 	{
+
+
+
+
+		// TODO: I will save the time on dosage loading/transmitting, and expression loading and transmitting
+		// TODO:
+		// 1. float * d_batch_var
+		// 2. float * d_expr
+
+
+
+
+
+		//============== timing starts ================
+    	struct timeval time_start;
+    	struct timeval time_end;
+    	double diff;
+    	gettimeofday(&time_start, NULL);
+
+
 		int pos = (pos_start + count) % (num_esample);
 		string esample = esample_tissue_rep[etissue][pos];
 		string individual = sample_to_individual(esample);
@@ -149,10 +182,31 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		// to: 1. forward_backward propagation;
 		// genotype dosage data
 		//cout << "getting the dosage data for individual #" << individual << endl;
+
+		/*
 		snp_dosage_load(&snp_dosage_list, individual);  // snp dosage data for one individual across all chromosomes
+		*/
+
 		// expression rpkm data: eQTL_tissue_rep[etissue][esample]
 		//cout << "we have this amount of genes expressed in this individual:" << eQTL_tissue_rep[etissue][esample].size() << endl;
 		// and the batch variable for this individual and this sample
+
+
+
+		//============== timing ends ================
+		gettimeofday(&time_end, NULL);
+		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+		printf("dosage: Time used totally is %f seconds.\n", diff);
+
+
+
+
+		/*
+		//============== timing starts ================
+    	gettimeofday(&time_start, NULL);
+
+
+
 		int num_batch_individual = batch_individual[individual].size();
 		int index = 0;
 		for(int i=0; i<num_batch_individual; i++)
@@ -171,6 +225,18 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+		//============== timing ends ================
+		gettimeofday(&time_end, NULL);
+		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+		printf("batch CPU: Time used totally is %f seconds.\n", diff);
+		*/
+
+
+
+
+		//============== timing starts ================
+		gettimeofday(&time_start, NULL);
+
 
 		// TODO GPU: load everything into GPU memory, and make them addressable
 		// NOTE: CPU should have all the data, and GPU has also another copy of these data
@@ -180,6 +246,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		// //==== int * d_etissue_index_p
 		// checkCudaErrors(cudaMemcpy( d_etissue_index_p, &etissue_index, 1*sizeof(int), cudaMemcpyHostToDevice));
 
+    	/*
 		//==== float * d_snp
 		long int pos_start = 0;
 		for(int i=0; i<NUM_CHR; i++)  // across all the chromosomes
@@ -188,6 +255,51 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 			checkCudaErrors(cudaMemcpy( (d_snp + pos_start), snp_dosage_list[i], dimension*sizeof(float), cudaMemcpyHostToDevice));
 			pos_start += dimension;
 		}
+		*/
+
+		// NOTE: the original d_snp pointer is problematic
+		int snp_index = d_snp_index_map[individual];
+		d_snp = d_snp_list[snp_index];
+
+
+
+		//============== timing ends ================
+		gettimeofday(&time_end, NULL);
+		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+		printf("dosage GPU: Time used totally is %f seconds.\n", diff);
+
+
+
+
+
+
+		/*
+		//============== timing starts ================
+    	gettimeofday(&time_start, NULL);
+
+
+
+		//==== float * d_batch_var
+		checkCudaErrors(cudaMemcpy( d_batch_var, batch_var, num_batch*sizeof(float), cudaMemcpyHostToDevice));
+
+
+
+		//============== timing ends ================
+		gettimeofday(&time_end, NULL);
+		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+		printf("batch GPU: Time used totally is %f seconds.\n", diff);
+		*/
+
+
+
+
+
+
+		/*
+		//============== timing starts ================
+    	gettimeofday(&time_start, NULL);
+
+
 
 		//==== float * d_expr
 		float * expr_list = (float *)malloc(num_gene*sizeof(float));
@@ -198,19 +310,24 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		checkCudaErrors(cudaMemcpy( d_expr, expr_list, num_gene*sizeof(float), cudaMemcpyHostToDevice));
 		free(expr_list);
 
-		//==== float * d_batch_var
-		checkCudaErrors(cudaMemcpy( d_batch_var, batch_var, num_batch*sizeof(float), cudaMemcpyHostToDevice));
+
+
+		//============== timing ends ================
+		gettimeofday(&time_end, NULL);
+		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+		printf("expr: Time used totally is %f seconds.\n", diff);
+		*/
+
+
+
 
 
 
 
 
 		//============== timing starts ================
-    	struct timeval time_start;
-    	struct timeval time_end;
-    	double diff;
     	gettimeofday(&time_start, NULL);
-    	printf("###");
+
 
 		forward_backward(etissue_index,
 						&snp_dosage_list,
@@ -232,7 +349,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		//============== timing ends ================
 		gettimeofday(&time_end, NULL);
 		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-		printf("Time used totally is %f seconds.\n", diff);
+		printf("(forward_backward) Time used totally is %f seconds.\n", diff);
 
 
 
@@ -287,6 +404,8 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	*/
 
 
+	//============== timing starts ================
+    gettimeofday(&time_start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -315,15 +434,10 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	float * d_x_3 = d_para_dev_batch_batch_hidden;
 	float * d_x_4 = d_para_dev_batch_hidden_gene;
 
-	//============== timing starts ================
-    struct timeval time_start;
-    struct timeval time_end;
-    double diff;
-    gettimeofday(&time_start, NULL);
+
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
-    printf("========================================================================================\n");
 	float factor = 1.0 / batch_size;
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
@@ -342,7 +456,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
 	gpu_scale<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , factor, d_x_4);
-    printf("========================================================================================\n");
+
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
@@ -549,16 +663,31 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+	//============== timing starts ================
+    gettimeofday(&time_start, NULL);
 
 	//===================================== Regularization in Regression =====================================
 	regularization(etissue_index);
 
+	//============== timing ends ================
+	gettimeofday(&time_end, NULL);
+	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+	printf("Time used totally is %f seconds.\n", diff);
+
+
+
+
+
+	//============== timing starts ================
+    gettimeofday(&time_start, NULL);
 
 	//=========================================== Gradient Descent ===========================================
 	gradient_descent(etissue_index);
 
-
-
+	//============== timing ends ================
+	gettimeofday(&time_end, NULL);
+	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
+	printf("Time used totally is %f seconds.\n", diff);
 
 
 
@@ -1244,18 +1373,9 @@ void regularization(int etissue_index)
 
 
 
-	//============== timing starts ================
-    struct timeval time_start;
-    struct timeval time_end;
-    double diff;
-    gettimeofday(&time_start, NULL);
-
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
-    printf("========================================================================================\n");
-	printf("GPU for regularization...\n");
-
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
@@ -1277,16 +1397,6 @@ void regularization(int etissue_index)
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
 	gpu_penalty<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_batch_hidden_gene, d_para_dev_batch_hidden_gene, lambda_batch_hidden_gene, sigma);
-	printf("========================================================================================\n");
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
-
-
-
-
 
 
 
@@ -1367,18 +1477,9 @@ void gradient_descent(int etissue_index)
 
 
 
-
-	//============== timing starts ================
-    struct timeval time_start;
-    struct timeval time_end;
-    double diff;
-    gettimeofday(&time_start, NULL);
-
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
-    printf("========================================================================================\n");
-    printf("GPU for gradient descent\n");
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
@@ -1400,12 +1501,6 @@ void gradient_descent(int etissue_index)
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
 	gpu_gd<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_batch_hidden_gene, d_para_dev_batch_hidden_gene, rate_learner);
-    printf("========================================================================================\n");
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
 
 
 

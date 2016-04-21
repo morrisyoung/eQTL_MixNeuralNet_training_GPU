@@ -91,6 +91,10 @@ extern long int * d_cis_para_index1;			// with length num_para_cis (below)
 extern long int num_para_cis;				// total amount of cis- parameters (across all genes)
 
 
+extern unordered_map<string, int> d_snp_index_map;
+extern vector<float *> d_snp_list;
+
+
 
 
 

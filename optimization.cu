@@ -118,6 +118,13 @@ long int * d_cis_para_index1;			// with length num_para_cis (below)
 long int num_para_cis;				// total amount of cis- parameters (across all genes)
 
 
+//==== load all genotype and gene expression data into GPU memory
+//unordered_map<string, float *> d_snp_rep;
+unordered_map<string, int> d_snp_index_map;
+vector<float *> d_snp_list;
+
+
+
 
 
 
@@ -896,7 +903,7 @@ void GPU_init()
 	checkCudaErrors(cudaMalloc(&d_etissue_index_p, 1*sizeof(int)));
 
 	//==== float * d_snp
-	checkCudaErrors(cudaMalloc(&d_snp, num_snp*sizeof(float)));
+	//checkCudaErrors(cudaMalloc(&d_snp, num_snp*sizeof(float)));
 
 	//==== float * d_expr
 	checkCudaErrors(cudaMalloc(&d_expr, num_gene*sizeof(float)));
@@ -999,6 +1006,43 @@ long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list 
 long int * d_cis_para_amount;			// with length "num_gene", amount of cis parameters of this gene
 long int num_para_cis;				// total amount of cis- parameters (across all genes)
 */
+
+
+
+
+	//==== load all genotype and gene expression data into GPU memory
+	//unordered_map<string, float *> d_snp_rep;
+	//====unordered_map<string, int> d_snp_index_map;
+	//====vector<float *> d_snp_list;
+	int index = 0;
+	for( auto it = snp_dosage_rep.begin(); it != snp_dosage_rep.end(); ++it )
+	{
+		string individual = it->first;
+
+		float * pointer = (float *)malloc(num_snp*sizeof(float));
+		long int count = 0;
+		for(int i=0; i<NUM_CHR; i++)
+		{
+			for(long j=0; j<snp_name_list[i].size(); j++)
+			{
+				float dosage = (it->second)[i][j];
+				pointer[count] = dosage;
+				count += 1;
+			}
+		}
+
+		float * pointer1;
+		checkCudaErrors(cudaMalloc(&pointer1, num_snp*sizeof(float)));
+		checkCudaErrors(cudaMemcpy( pointer1, pointer, num_snp*sizeof(float), cudaMemcpyHostToDevice));
+		free(pointer);
+
+		d_snp_index_map.emplace(individual, index);
+		index += 1;
+		d_snp_list.push_back(pointer1);
+	}
+
+
+
 
 
 
@@ -1162,7 +1206,7 @@ void GPU_release()
     checkCudaErrors(cudaFree(d_etissue_index_p));
 
 	//==== float * d_snp
-    checkCudaErrors(cudaFree(d_snp));
+    //checkCudaErrors(cudaFree(d_snp));
 
 	//==== float * d_expr
     checkCudaErrors(cudaFree(d_expr));
@@ -1204,6 +1248,16 @@ void GPU_release()
 	checkCudaErrors(cudaFree(d_cis_para_index1));
 
 
+
+
+	//==== load all genotype and gene expression data into GPU memory
+	//unordered_map<string, float *> d_snp_rep;
+	//====unordered_map<string, int> d_snp_index_map;
+	//====vector<float *> d_snp_list;
+	for(int i=0; i<d_snp_list.size(); i++)
+	{
+		checkCudaErrors(cudaFree( d_snp_list[i] ));
+	}
 
 
 
@@ -1466,7 +1520,7 @@ void optimize()
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+	printf("&&&&Time used totally (one mini-batch) is %f seconds.\n", diff);
 
 
 
