@@ -1170,6 +1170,7 @@ void GPU_release()
 
 
 
+
     //==== para temp
     // temp space for Matrix Multiplication
 	//float * d_temp_cis_gene;
@@ -1254,8 +1255,12 @@ void GPU_release()
 		checkCudaErrors(cudaFree( d_sample_list[i] ));
 	}
 
-
-
+	//unordered_map<string, int> d_batch_index_map;
+	//vector<float *> d_batch_list;
+	for(int i=0; i<d_batch_list.size(); i++)
+	{
+		checkCudaErrors(cudaFree( d_batch_list[i] ));
+	}
 
 
 

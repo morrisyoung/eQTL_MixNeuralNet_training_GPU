@@ -369,6 +369,116 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+	// DEBUG
+    // DEBUG: test the dev here
+    // transfer them back, and save into temp files
+    // if this is working, the problem is below; else, I can start debugging the above
+	//==== para_dev transfer back
+	//
+    for(int i=0; i<num_etissue; i++)
+    {
+		float * d_para_dev_cis_gene = d_list_para_dev_cis_gene[i];
+		long int dimension1 = cube_para_dev_cis_gene[i].get_dimension1();
+		long int pos_start = 0;
+		for(long int j=0; j<dimension1; j++)
+		{
+			long int amount = cube_para_dev_cis_gene[i].get_dimension2(j);
+			float * x = cube_para_dev_cis_gene[i].get_list(j);
+			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+			pos_start += amount;
+		}
+    }
+
+    //
+	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    //
+	dimension1 = cube_para_dev_cellenv_gene[0].get_dimension1();
+	dimension2 = cube_para_dev_cellenv_gene[0].get_dimension2();
+	for(int j=0; j<num_etissue; j++)
+	{
+		float * d_para_dev_cellenv_gene = d_list_para_dev_cellenv_gene[j];
+	    for(long int i=0; i<dimension1; i++)
+	    {
+	    	float * x = cube_para_dev_cellenv_gene[j].get_list(i);
+	    	long int pos_start = i * dimension2;
+			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cellenv_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+	    }
+	}
+
+	//
+	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
+	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_batch_batch_hidden.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    //
+	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
+	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_batch_hidden_gene.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_hidden_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+
+	//==== para_dev save
+	char filename[100];
+	//================================ vector<Matrix_imcomp> cube_para_dev_cis_gene ================================
+	// this is tissue specific
+	sprintf(filename, "%s", "../result_tempdata/para_dev_cis_gene_before.txt");
+	cube_para_dev_cis_gene[etissue_index].save(filename);
+
+
+	//================================== Matrix matrix_para_dev_snp_cellenv ===================================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_snp_cellenv_before.txt");
+	matrix_para_dev_snp_cellenv.save(filename);
+
+
+	//============================== vector<Matrix> cube_para_dev_cellenv_gene ==============================
+	// this is tissue specific
+	sprintf(filename, "%s", "../result_tempdata/para_dev_cellenv_gene_before.txt");
+	cube_para_dev_cellenv_gene[etissue_index].save(filename);
+
+
+	//=============================== Matrix matrix_para_dev_batch_batch_hidden ===============================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_batch_hidden_before.txt");
+	matrix_para_dev_batch_batch_hidden.save(filename);
+
+
+	//=============================== Matrix matrix_para_dev_batch_hidden_gene ================================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_hidden_gene_before.txt");
+	matrix_para_dev_batch_hidden_gene.save(filename);
+
+
+
+
+
+
+
+	// SHOULD START DEBUGGING FROM HERE !!!
+	// the previous routines seem problematic, and the following routines also bad
+
+
+
+
+
+
+
+
+
 	//********************************* aggregation of this mini-batch *****************************************
 	// 1. average the derivatives calculated from previous steps
 	// 2. will add the derivatives due to regularization in the next part
@@ -424,6 +534,102 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 	printf("Time used totally is %f seconds.\n", diff);
+
+
+
+	/*
+	// DEBUG
+	//
+    for(int i=0; i<num_etissue; i++)
+    {
+		float * d_para_dev_cis_gene = d_list_para_dev_cis_gene[i];
+		long int dimension1 = cube_para_dev_cis_gene[i].get_dimension1();
+		long int pos_start = 0;
+		for(long int j=0; j<dimension1; j++)
+		{
+			long int amount = cube_para_dev_cis_gene[i].get_dimension2(j);
+			float * x = cube_para_dev_cis_gene[i].get_list(j);
+			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+			pos_start += amount;
+		}
+    }
+
+    //
+	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    //
+	dimension1 = cube_para_dev_cellenv_gene[0].get_dimension1();
+	dimension2 = cube_para_dev_cellenv_gene[0].get_dimension2();
+	for(int j=0; j<num_etissue; j++)
+	{
+		float * d_para_dev_cellenv_gene = d_list_para_dev_cellenv_gene[j];
+	    for(long int i=0; i<dimension1; i++)
+	    {
+	    	float * x = cube_para_dev_cellenv_gene[j].get_list(i);
+	    	long int pos_start = i * dimension2;
+			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cellenv_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+	    }
+	}
+
+	//
+	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
+	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_batch_batch_hidden.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    //
+	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
+	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_batch_hidden_gene.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_hidden_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+	//================================ vector<Matrix_imcomp> cube_para_dev_cis_gene ================================
+	// this is tissue specific
+	sprintf(filename, "%s", "../result_tempdata/para_dev_cis_gene_after.txt");
+	cube_para_dev_cis_gene[etissue_index].save(filename);
+
+
+	//================================== Matrix matrix_para_dev_snp_cellenv ===================================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_snp_cellenv_after.txt");
+	matrix_para_dev_snp_cellenv.save(filename);
+
+
+	//============================== vector<Matrix> cube_para_dev_cellenv_gene ==============================
+	// this is tissue specific
+	sprintf(filename, "%s", "../result_tempdata/para_dev_cellenv_gene_after.txt");
+	cube_para_dev_cellenv_gene[etissue_index].save(filename);
+
+
+	//=============================== Matrix matrix_para_dev_batch_batch_hidden ===============================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_batch_hidden_after.txt");
+	matrix_para_dev_batch_batch_hidden.save(filename);
+
+
+	//=============================== Matrix matrix_para_dev_batch_hidden_gene ================================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_hidden_gene_after.txt");
+	matrix_para_dev_batch_hidden_gene.save(filename);
+	*/
+
+
+
+
+
+
 
 
 
@@ -621,10 +827,125 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+
+
+
+
+    // DEBUG
+    /*
+    // DEBUG: test the dev here
+    // transfer them back, and save into temp files
+    // if this is working, the problem is below; else, I can start debugging the above
+	//==== para_dev transfer back
+	//
+    for(int i=0; i<num_etissue; i++)
+    {
+		float * d_para_dev_cis_gene = d_list_para_dev_cis_gene[i];
+		long int dimension1 = cube_para_dev_cis_gene[i].get_dimension1();
+		long int pos_start = 0;
+		for(long int j=0; j<dimension1; j++)
+		{
+			long int amount = cube_para_dev_cis_gene[i].get_dimension2(j);
+			float * x = cube_para_dev_cis_gene[i].get_list(j);
+			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+			pos_start += amount;
+		}
+    }
+
+    //
+	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    //
+	dimension1 = cube_para_dev_cellenv_gene[0].get_dimension1();
+	dimension2 = cube_para_dev_cellenv_gene[0].get_dimension2();
+	for(int j=0; j<num_etissue; j++)
+	{
+		float * d_para_dev_cellenv_gene = d_list_para_dev_cellenv_gene[j];
+	    for(long int i=0; i<dimension1; i++)
+	    {
+	    	float * x = cube_para_dev_cellenv_gene[j].get_list(i);
+	    	long int pos_start = i * dimension2;
+			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cellenv_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+	    }
+	}
+
+	//
+	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
+	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_batch_batch_hidden.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    //
+	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
+	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_batch_hidden_gene.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_hidden_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+
+
+	//==== para_dev save
+	//================================ vector<Matrix_imcomp> cube_para_cis_gene ================================
+	// this is tissue specific
+	char filename[100] = "../result_tempdata/para_dev_cis_gene.txt";
+	cube_para_dev_cis_gene[etissue_index].save(filename);
+
+
+	//================================== Matrix matrix_para_snp_cellenv ===================================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_snp_cellenv.txt");
+	matrix_para_dev_snp_cellenv.save(filename);
+
+
+	//============================== vector<Matrix> cube_para_cellenv_gene ==============================
+	// this is tissue specific
+	sprintf(filename, "%s", "../result_tempdata/para_dev_cellenv_gene.txt");
+	cube_para_dev_cellenv_gene[etissue_index].save(filename);
+
+
+	//=============================== Matrix matrix_para_batch_batch_hidden ===============================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_batch_hidden.txt");
+	matrix_para_dev_batch_batch_hidden.save(filename);
+
+
+	//=============================== Matrix matrix_para_batch_hidden_gene ================================
+	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_hidden_gene.txt");
+	matrix_para_dev_batch_hidden_gene.save(filename);
+
+
+
+	// So ,it start going wrong from above
+	*/
+
+
+
+
+
+
+
+
+
+
+
+
 	//============== timing starts ================
     gettimeofday(&time_start, NULL);
 
 	//===================================== Regularization in Regression =====================================
+	// NOTE: not yet tested, but this is too straightforward to test
 	regularization(etissue_index);
 
 	//============== timing ends ================
@@ -635,16 +956,20 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+
 	//============== timing starts ================
     gettimeofday(&time_start, NULL);
 
 	//=========================================== Gradient Descent ===========================================
+	// NOTE: this routine is tested to be correct (Apr.25)
 	gradient_descent(etissue_index);
 
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 	printf("gd: Time used totally is %f seconds.\n", diff);
+
+
 
 
 

@@ -67,7 +67,7 @@ void gpu_penalty(long int dimension, float * para, float * para_dev, float lambd
     	float beta = para[i];
     	float derivative = beta / sqrt (beta * beta + sigma);  // this is an approximation of the LASSO regularization
     	para_dev[i] += lambda * derivative;
-    }
+	}
 
 }
 
@@ -125,6 +125,22 @@ void gpu_addone(long int dimension, float * array)
     }
 
 }
+
+
+
+
+// set a number to all the variables
+__global__
+void gpu_setnum(long int dimension, float * array, float number)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+		array[i] = number;
+    }
+
+}
+
 
 
 
