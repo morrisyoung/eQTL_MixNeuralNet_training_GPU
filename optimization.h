@@ -94,7 +94,11 @@ extern long int num_para_cis;				// total amount of cis- parameters (across all 
 extern unordered_map<string, int> d_snp_index_map;
 extern vector<float *> d_snp_list;
 
+extern unordered_map<string, int> d_sample_index_map;
+extern vector<float *> d_sample_list;
 
+extern unordered_map<string, int> d_batch_index_map;
+extern vector<float *> d_batch_list;
 
 
 

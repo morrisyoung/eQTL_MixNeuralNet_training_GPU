@@ -263,8 +263,6 @@ main:	opt_subroutine.o optimization.o
 
 
 
-
-
 #$(OBJS_GPU):$(SRCS_GPU)
 #	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) $(OPT) -o $@ -c $<
 

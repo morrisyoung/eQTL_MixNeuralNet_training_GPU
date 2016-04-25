@@ -114,6 +114,20 @@ void gpu_clean(long int dimension, float * array)
 
 
 
+// add 1 to all the elements of a matrix
+__global__
+void gpu_addone(long int dimension, float * array)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+		array[i] += 1;
+    }
+
+}
+
+
+
 // go through the neuralnet (one parameter tunable)
 __global__
 void gpu_neuralnet_ac_func(long int dimension, float * array)
