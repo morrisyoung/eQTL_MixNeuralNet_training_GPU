@@ -100,6 +100,10 @@ extern vector<float *> d_sample_list;
 extern unordered_map<string, int> d_batch_index_map;
 extern vector<float *> d_batch_list;
 
+extern unordered_map<string, int> d_sample_test_index_map;
+extern vector<float *> d_sample_test_list;
+
+
 
 
 

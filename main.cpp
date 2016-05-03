@@ -402,14 +402,11 @@ int main()
 
 
 
-
-
 	//
 	// DEBUG the other parts --> (Jan.26) looks like no problem
 	//
 	//======================================= main optimization routine ==========================================
 	optimize();
-
 
 
 

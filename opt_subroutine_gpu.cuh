@@ -119,10 +119,23 @@ __global__
 void gpu_addone(long int dimension, float * array)
 {
 	long int i = blockIdx.x*blockDim.x + threadIdx.x;
-    if(i < dimension)
-    {
+
+	// DEBUG
+	//printf("%ld, %ld\n", i, dimension);
+	// this one doesn't show correctly; I guess as too many blocks are involved
+
+	// DEBUG mode
+	if(i < dimension)
+	{
+
+		/*
+		// DEBUG
+    	long int index2 = i % dimension2;
+    	array[i] = index2;
+    	*/
+
 		array[i] += 1;
-    }
+	}
 
 }
 
@@ -141,6 +154,31 @@ void gpu_setnum(long int dimension, float * array, float number)
 
 }
 
+
+// DEBUG
+// set a number to all the variables
+__global__
+void gpu_setnum_1(long int dimension, float * array)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+		array[i] = i;
+    }
+
+}
+
+// set a number to all the variables
+__global__
+void gpu_setnum_2(long int dimension, float * array)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+		array[i] = i+1;
+    }
+
+}
 
 
 
@@ -178,6 +216,9 @@ void gpu_neuralnet_ac_func_dev(long int dimension, float * array)
 __global__
 void gpu_matrix_mul_mul(long int dimension1, long int dimension2, float * input, float * para, float * temp)
 {
+	// DEBUG
+	//printf("%ld, %ld, %ld\n", dimension1, dimension2, dimension1*dimension2);
+
 	long int i = blockIdx.x*blockDim.x + threadIdx.x;
     if(i < dimension1*dimension2)
     {
@@ -280,32 +321,32 @@ void gpu_matrix_mul_cis_mul(long int dimension, long int dimension1, float * inp
 		}
 		*/
 
+		// gene index
 		int gene_index = d_cis_para_index1[i];
+
+		// find amount
+		long int amount = d_cis_para_amount[gene_index];
 
     	// find shift
 		long int shift = i - d_cis_para_start[gene_index];
 
-    	// find snp pos
-		long int pos_snp = d_cis_snp_start[gene_index] + shift;
-
-    	// calcluate
 		float snp;
-		long int amount = d_cis_para_amount[gene_index];
 		if(shift == amount - 1)		// intercept
 		{
 			snp = 1;
 		}
 		else
 		{
+			long int pos_snp = d_cis_snp_start[gene_index] + shift;
 			snp = input[pos_snp];
 		}
 
-		temp[i] += para[i] * snp;
-
+		temp[i] = para[i] * snp;
 
     }
 
 }
+
 
 __global__
 void gpu_matrix_mul_cis_add(long int dimension1, float * temp, float * output,\
@@ -505,5 +546,51 @@ void gpu_backprop_cis(long int dimension, long int dimension1, float * para_dev,
 	}
 
 }
+
+
+
+
+// loglike and testerror cal
+// two-step loglike cal
+__global__
+void gpu_cal_loglike_func(long int dimension, float * d_error_list, float * d_temp_list)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+    	float error = d_error_list[i];
+		d_temp_list[i] = -pow(error, 2.0);
+    }
+}
+
+__global__
+void gpu_cal_testerror_func(long int dimension, float * d_error_list, float * d_temp_list)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+    	float error = d_error_list[i];
+		d_temp_list[i] = abs(error);
+    }
+}
+
+__global__
+void gpu_cal_loglike_add(long int dimension, long int dimension1, float * d_temp_list, float * d_result)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+	if(i < dimension)
+	{
+		for(long int j=0; j<dimension1; j++)
+		{
+			(* d_result) += d_temp_list[j];		// some this is cumulative
+		}
+	}
+}
+
+
+
+
+
+
 
 

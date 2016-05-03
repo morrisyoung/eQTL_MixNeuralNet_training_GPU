@@ -128,7 +128,8 @@ vector<float *> d_sample_list;
 unordered_map<string, int> d_batch_index_map;
 vector<float *> d_batch_list;
 
-
+unordered_map<string, int> d_sample_test_index_map;
+vector<float *> d_sample_test_list;
 
 
 
@@ -452,6 +453,16 @@ void opt_tissue_hierarchy_load()
 	//unordered_map<string, hierarchy_neighbor> hash_leaf_parent;		// --> [2]
 	//unordered_map<string, vector< hierarchy_neighbor >> hash_internode_neighbor;
 																		// --> [4]
+
+
+
+
+
+
+
+
+	// (Apr.26) temporarily commented out
+	/*
 	while(1)
 	{
 		//
@@ -532,6 +543,7 @@ void opt_tissue_hierarchy_load()
 		int etissue_index = etissue_index_map[leaf];
 		etissue_dis_par_list[etissue_index] = (it->second).branch;
 	}
+	*/
 
 
 	return;
@@ -720,7 +732,7 @@ void opt_para_release()
 
 void GPU_init()
 {
-	int deviceID = 0;
+	int deviceID = 1;
     checkCudaErrors(cudaSetDevice(deviceID));
 
     long int dimension, dimension1, dimension2;
@@ -938,7 +950,6 @@ void GPU_init()
 		for(int j=0; j<chr-1; j++)
 		{
 			pos_start += snp_name_list[j].size();
-
 		}
 		temp_d_cis_snp_start[i] = pos_start;
 	}
@@ -950,16 +961,17 @@ void GPU_init()
     checkCudaErrors(cudaMalloc(&d_cis_para_index1, num_para_cis*sizeof(long int)));
 	dimension1 = cube_para_cis_gene[0].get_dimension1();
 	pos_start = 0;
-	for(long int j=0; j<dimension1; j++)
+	for(long int i=0; i<dimension1; i++)
 	{
-		long int amount = cube_para_cis_gene[0].get_dimension2(j);
+		long int amount = cube_para_cis_gene[0].get_dimension2(i);
 		long int * x = (long int *)malloc(amount*sizeof(long int));
-		for(long int i=0; i<amount; i++)
+		for(long int j=0; j<amount; j++)
 		{
-			x[i] = j;
+			x[j] = i;
 		}
 		checkCudaErrors(cudaMemcpy( (d_cis_para_index1 + pos_start), x, amount*sizeof(long int), cudaMemcpyHostToDevice));
 		pos_start += amount;
+		free(x);
 	}
 
 
@@ -1019,6 +1031,30 @@ void GPU_init()
 		d_sample_list.push_back(pointer1);
 	}
 
+	//====unordered_map<string, int> d_sample_test_index_map;
+	//====vector<float *> d_sample_test_list;
+	index = 0;
+	for( auto it = eQTL_samples_test.begin(); it != eQTL_samples_test.end(); ++it )
+	{
+		string esample = it->first;
+		string etissue = it->second;
+
+		float * pointer = (float *)malloc(num_gene*sizeof(float));
+		for(int i=0; i<eQTL_tissue_rep_test[etissue][esample].size(); i++)
+		{
+			pointer[i] = eQTL_tissue_rep_test[etissue][esample][i];
+		}
+
+		float * pointer1;
+		checkCudaErrors(cudaMalloc(&pointer1, num_gene*sizeof(float)));
+		checkCudaErrors(cudaMemcpy( pointer1, pointer, num_gene*sizeof(float), cudaMemcpyHostToDevice));
+		free(pointer);
+
+		d_sample_test_index_map.emplace(esample, index);
+		index += 1;
+		d_sample_test_list.push_back(pointer1);
+	}
+
 	//unordered_map<string, int> d_batch_index_map;
 	//vector<float *> d_batch_list;
 	index = 0;
@@ -1054,7 +1090,6 @@ void GPU_init()
 
 
 
-
 }
 
 
@@ -1062,6 +1097,10 @@ void GPU_init()
 
 void GPU_release()
 {
+	// DEBUG
+	int deviceID = 1;
+    checkCudaErrors(cudaSetDevice(deviceID));
+
 
 	//====================================================
 	//================ GPU data retrieval ================
@@ -1085,18 +1124,18 @@ void GPU_release()
 	for(int j=0; j<num_etissue; j++)
 	{
 		float * d_para_dev_cellenv_gene = d_list_para_dev_cellenv_gene[j];
-	    checkCudaErrors(cudaFree(d_para_dev_cellenv_gene));
+		checkCudaErrors(cudaFree(d_para_dev_cellenv_gene));
 	}
 
 	//Matrix matrix_para_dev_batch_batch_hidden --> float * d_para_dev_batch_batch_hidden
 	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
 	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
-    checkCudaErrors(cudaFree(d_para_dev_batch_batch_hidden));
+	checkCudaErrors(cudaFree(d_para_dev_batch_batch_hidden));
 
 	//Matrix matrix_para_dev_batch_hidden_gene --> float * d_para_dev_batch_hidden_gene
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
-    checkCudaErrors(cudaFree(d_para_dev_batch_hidden_gene));
+	checkCudaErrors(cudaFree(d_para_dev_batch_hidden_gene));
 
 
 
@@ -1255,6 +1294,13 @@ void GPU_release()
 		checkCudaErrors(cudaFree( d_sample_list[i] ));
 	}
 
+	//====unordered_map<string, int> d_sample_test_index_map;
+	//====vector<float *> d_sample_test_list;
+	for(int i=0; i<d_sample_test_list.size(); i++)
+	{
+		checkCudaErrors(cudaFree( d_sample_test_list[i] ));
+	}
+
 	//unordered_map<string, int> d_batch_index_map;
 	//vector<float *> d_batch_list;
 	for(int i=0; i<d_batch_list.size(); i++)
@@ -1355,6 +1401,7 @@ void optimize()
 
 
 
+
 			//======== likelihood ========
 			// indicating the current tissue
 			char buf[100];
@@ -1385,10 +1432,161 @@ void optimize()
 
 
 
+				/*
+				// DEBUG
+				// transfer back and forth
+				if(count3 % 6 == 0)
+				{
+					//==== para
+					//vector<Matrix_imcomp> cube_para_cis_gene--> vector<float *> d_list_para_cis_gene;
+				    for(int i=0; i<num_etissue; i++)
+				    {
+						float * d_para_cis_gene = d_list_para_cis_gene[i];
+						long int dimension1 = cube_para_cis_gene[i].get_dimension1();
+						long int pos_start = 0;
+						for(long int j=0; j<dimension1; j++)
+						{
+							long int amount = cube_para_cis_gene[i].get_dimension2(j);
+							float * x = cube_para_cis_gene[i].get_list(j);
+							checkCudaErrors(cudaMemcpy(x, (d_para_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+							pos_start += amount;
+						}
+					    //checkCudaErrors(cudaFree(d_para_cis_gene));
+				    }
+
+					//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
+					long int dimension1 = matrix_para_snp_cellenv.get_dimension1();
+					long int dimension2 = matrix_para_snp_cellenv.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_snp_cellenv.get_list(i);
+				    	long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy(x, (d_para_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+				    }
+				    //checkCudaErrors(cudaFree(d_para_snp_cellenv));
+
+					//vector<Matrix> cube_para_cellenv_gene --> <float *> d_list_para_cellenv_gene
+					dimension1 = cube_para_cellenv_gene[0].get_dimension1();
+					dimension2 = cube_para_cellenv_gene[0].get_dimension2();
+					for(int j=0; j<num_etissue; j++)
+					{
+						float * d_para_cellenv_gene = d_list_para_cellenv_gene[j];
+					    for(long int i=0; i<dimension1; i++)
+					    {
+					    	float * x = cube_para_cellenv_gene[j].get_list(i);
+					    	long int pos_start = i * dimension2;
+							checkCudaErrors(cudaMemcpy(x, (d_para_cellenv_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+					    }
+					    //checkCudaErrors(cudaFree(d_para_cellenv_gene));
+					}
+
+					//Matrix matrix_para_batch_batch_hidden --> float * d_para_batch_batch_hidden
+					dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
+					dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_batch_batch_hidden.get_list(i);
+				    	long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy(x, (d_para_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+				    }
+				    //checkCudaErrors(cudaFree(d_para_batch_batch_hidden));
+
+					//Matrix matrix_para_batch_hidden_gene --> float * d_para_batch_hidden_gene
+					dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
+					dimension2 = matrix_para_batch_hidden_gene.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_batch_hidden_gene.get_list(i);
+				    	long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy(x, (d_para_batch_hidden_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+				    }
+				    //checkCudaErrors(cudaFree(d_para_batch_hidden_gene));
+
+
+
+				    //
+				    //
+				    //
+
+
+				    //==== para
+					//vector<Matrix_imcomp> cube_para_cis_gene--> vector<float *> d_list_para_cis_gene;
+				    for(int i=0; i<num_etissue; i++)
+				    {
+						long int dimension1 = cube_para_cis_gene[i].get_dimension1();
+						long int pos_start = 0;
+						for(long int j=0; j<dimension1; j++)
+						{
+							long int amount = cube_para_cis_gene[i].get_dimension2(j);
+							float * x = cube_para_cis_gene[i].get_list(j);
+							checkCudaErrors(cudaMemcpy( (d_list_para_cis_gene[i] + pos_start), x, amount*sizeof(float), cudaMemcpyHostToDevice));
+							pos_start += amount;
+						}
+
+				    }
+
+					//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
+					dimension1 = matrix_para_snp_cellenv.get_dimension1();
+					dimension2 = matrix_para_snp_cellenv.get_dimension2();
+					for(long int i=0; i<dimension1; i++)
+					{
+						float * x = matrix_para_snp_cellenv.get_list(i);
+						long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy( (d_para_snp_cellenv + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
+				    }
+
+					//vector<Matrix> cube_para_cellenv_gene --> vector<float *> d_list_para_cellenv_gene
+					dimension1 = cube_para_cellenv_gene[0].get_dimension1();
+					dimension2 = cube_para_cellenv_gene[0].get_dimension2();
+				    for(int j=0; j<num_etissue; j++)
+				    {
+					    for(long int i=0; i<dimension1; i++)
+					    {
+					    	float * x = cube_para_cellenv_gene[j].get_list(i);
+					    	long int pos_start = i * dimension2;
+					    	checkCudaErrors(cudaMemcpy( (d_list_para_cellenv_gene[j] + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
+					    }
+				    }
+
+					//Matrix matrix_para_batch_batch_hidden --> float * d_para_batch_batch_hidden
+					dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
+					dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_batch_batch_hidden.get_list(i);
+				    	long int pos_start = i * dimension2;
+				    	checkCudaErrors(cudaMemcpy( (d_para_batch_batch_hidden + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
+				    }
+
+					//Matrix matrix_para_batch_hidden_gene --> float * d_para_batch_hidden_gene
+					dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
+					dimension2 = matrix_para_batch_hidden_gene.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_batch_hidden_gene.get_list(i);
+				    	long int pos_start = i * dimension2;
+				    	checkCudaErrors(cudaMemcpy( (d_para_batch_hidden_gene + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
+				    }
+
+
+
+
+				}
+				*/
+
+
+
+
+
+
+
 				int pos_start = (batch_size * count3) % (num_esample);
 				printf("[@@@] now we are working on %d iter_out (%d total), eTissue #%d (%d total) -- %s (%d training samples in), #%d mini-batch (%d batch size, rounding all samples).\n", count1+1, iter_learn_out, count2+1, num_etissue, etissue.c_str(), num_esample, count3+1, batch_size);
 				forward_backward_prop_batch(etissue, pos_start, num_esample);
 				// leaving this mini-batch
+
+
+
 
 
 
@@ -1405,10 +1603,113 @@ void optimize()
 					cout << count3 + 1 << endl;
 					break;
 				}
+				*/
 
 
 
 
+				// GPU loglike and testerror
+				int num_check_every = 5;
+
+				//======== likelihood ========
+				// (Feb.14) after we finish this mini-batch, we'll need to check the log-likelihood of the model (for the current tissue); or maybe check every several mini-batches
+				if(count3 % num_check_every == 0)
+				{
+
+					// I will calculate directly in GPU
+					/*
+					// transfer parameters back from GPU
+					//==== para
+					//vector<Matrix_imcomp> cube_para_cis_gene--> vector<float *> d_list_para_cis_gene;
+				    for(int i=0; i<num_etissue; i++)
+				    {
+						float * d_para_cis_gene = d_list_para_cis_gene[i];
+						long int dimension1 = cube_para_cis_gene[i].get_dimension1();
+						long int pos_start = 0;
+						for(long int j=0; j<dimension1; j++)
+						{
+							long int amount = cube_para_cis_gene[i].get_dimension2(j);
+							float * x = cube_para_cis_gene[i].get_list(j);
+							checkCudaErrors(cudaMemcpy(x, (d_para_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+							pos_start += amount;
+						}
+				    }
+
+					//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
+					long int dimension1 = matrix_para_snp_cellenv.get_dimension1();
+					long int dimension2 = matrix_para_snp_cellenv.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_snp_cellenv.get_list(i);
+				    	long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy(x, (d_para_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+				    }
+
+					//vector<Matrix> cube_para_cellenv_gene --> <float *> d_list_para_cellenv_gene
+					dimension1 = cube_para_cellenv_gene[0].get_dimension1();
+					dimension2 = cube_para_cellenv_gene[0].get_dimension2();
+					for(int j=0; j<num_etissue; j++)
+					{
+						float * d_para_cellenv_gene = d_list_para_cellenv_gene[j];
+					    for(long int i=0; i<dimension1; i++)
+					    {
+					    	float * x = cube_para_cellenv_gene[j].get_list(i);
+					    	long int pos_start = i * dimension2;
+							checkCudaErrors(cudaMemcpy(x, (d_para_cellenv_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+					    }
+					}
+
+					//Matrix matrix_para_batch_batch_hidden --> float * d_para_batch_batch_hidden
+					dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
+					dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_batch_batch_hidden.get_list(i);
+				    	long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy(x, (d_para_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+				    }
+
+					//Matrix matrix_para_batch_hidden_gene --> float * d_para_batch_hidden_gene
+					dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
+					dimension2 = matrix_para_batch_hidden_gene.get_dimension2();
+				    for(long int i=0; i<dimension1; i++)
+				    {
+				    	float * x = matrix_para_batch_hidden_gene.get_list(i);
+				    	long int pos_start = i * dimension2;
+						checkCudaErrors(cudaMemcpy(x, (d_para_batch_hidden_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+				    }
+				    */
+
+
+
+
+				    // loglike
+					float loglike;
+					loglike = cal_loglike(etissue);
+
+					char buf[1024];
+					sprintf(buf, "%f\t", loglike);
+					fwrite(buf, sizeof(char), strlen(buf), file_out_loglike);
+
+
+
+
+					// testerror
+					float testerror;
+					testerror = cal_testerror(etissue);
+
+					//char buf[1024];
+					sprintf(buf, "%f\t", testerror);
+					fwrite(buf, sizeof(char), strlen(buf), file_out_testerror);
+				}
+
+
+
+
+
+
+
+    			/*
 				//=========================================================================================================
 				//****************************************** loglike or testerror *****************************************
 				//=========================================================================================================
@@ -1441,10 +1742,9 @@ void optimize()
 
 
 
-
 				// DEBUG
 				// Mar.30: DEBUG: run only one mini-batch to see the functionality
-				break;
+				//break;
 
 
 
@@ -1511,12 +1811,15 @@ void optimize()
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("&&&&Time used totally (one mini-batch) is %f seconds.\n", diff);
+	printf("&&&&Time used totally (one training) is %f seconds.\n", diff);
 
 
 
 	//======== GPU global variable release
 	GPU_release();
+
+
+
 
 
 

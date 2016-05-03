@@ -34,6 +34,7 @@
 
 
 
+
 using namespace std;
 
 
@@ -52,6 +53,16 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+
+
+	// DEBUG
+	int deviceID = 1;
+    checkCudaErrors(cudaSetDevice(deviceID));
+
+
+
+
+
 	/*
 	// DEBUG:
 	// add one test: test whether the GPU actually touches the transfered data, thus add one to the data
@@ -59,7 +70,13 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
-	gpu_addone<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv);
+	//gpu_addone<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv);
+
+	// DEBUG: test the maximum possible size of a grid
+	//gpu_addone<<< 65535 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv);
+	gpu_addone<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( (dimension1*dimension2) , d_para_snp_cellenv);
+	// NOTE: be careful on the maximum possible blocks
+
 
 	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
 	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
@@ -75,6 +92,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 	return;
 	*/
+
 
 
 
@@ -149,8 +167,6 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	for(int count=0; count<batch_size; count++)
 	{
 
-
-
 		// TODO: I will save the time on dosage loading/transmitting, and expression loading and transmitting
 		// TODO:
 		// 1. float * d_batch_var
@@ -222,7 +238,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 		//==========================================================================================================
-		//========================================== CPU data preparation ==========================================
+		//========================================== GPU data preparation ==========================================
 		//==========================================================================================================
 		//============== timing starts ================
 		gettimeofday(&time_start, NULL);
@@ -331,6 +347,9 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 		printf("(forward_backward) Time used totally is %f seconds.\n", diff);
 
+		printf("###### %f\n", diff);
+
+
 
 
 
@@ -369,6 +388,8 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+
+	/*
 	// DEBUG
     // DEBUG: test the dev here
     // transfer them back, and save into temp files
@@ -416,14 +437,14 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	//
 	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
 	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_dev_batch_batch_hidden.get_list(i);
-    	long int pos_start = i * dimension2;
+	for(long int i=0; i<dimension1; i++)
+	{
+		float * x = matrix_para_dev_batch_batch_hidden.get_list(i);
+		long int pos_start = i * dimension2;
 		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-    }
+	}
 
-    //
+	//
 	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
     for(long int i=0; i<dimension1; i++)
@@ -461,7 +482,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	//=============================== Matrix matrix_para_dev_batch_hidden_gene ================================
 	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_hidden_gene_before.txt");
 	matrix_para_dev_batch_hidden_gene.save(filename);
-
+	*/
 
 
 
@@ -533,100 +554,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
-
-
-
-	/*
-	// DEBUG
-	//
-    for(int i=0; i<num_etissue; i++)
-    {
-		float * d_para_dev_cis_gene = d_list_para_dev_cis_gene[i];
-		long int dimension1 = cube_para_dev_cis_gene[i].get_dimension1();
-		long int pos_start = 0;
-		for(long int j=0; j<dimension1; j++)
-		{
-			long int amount = cube_para_dev_cis_gene[i].get_dimension2(j);
-			float * x = cube_para_dev_cis_gene[i].get_list(j);
-			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cis_gene + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
-			pos_start += amount;
-		}
-    }
-
-    //
-	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
-	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
-    	long int pos_start = i * dimension2;
-		checkCudaErrors(cudaMemcpy(x, (d_para_dev_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-    }
-
-    //
-	dimension1 = cube_para_dev_cellenv_gene[0].get_dimension1();
-	dimension2 = cube_para_dev_cellenv_gene[0].get_dimension2();
-	for(int j=0; j<num_etissue; j++)
-	{
-		float * d_para_dev_cellenv_gene = d_list_para_dev_cellenv_gene[j];
-	    for(long int i=0; i<dimension1; i++)
-	    {
-	    	float * x = cube_para_dev_cellenv_gene[j].get_list(i);
-	    	long int pos_start = i * dimension2;
-			checkCudaErrors(cudaMemcpy(x, (d_para_dev_cellenv_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-	    }
-	}
-
-	//
-	dimension1 = matrix_para_dev_batch_batch_hidden.get_dimension1();
-	dimension2 = matrix_para_dev_batch_batch_hidden.get_dimension2();
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_dev_batch_batch_hidden.get_list(i);
-    	long int pos_start = i * dimension2;
-		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-    }
-
-    //
-	dimension1 = matrix_para_dev_batch_hidden_gene.get_dimension1();
-	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_dev_batch_hidden_gene.get_list(i);
-    	long int pos_start = i * dimension2;
-		checkCudaErrors(cudaMemcpy(x, (d_para_dev_batch_hidden_gene + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-    }
-
-	//================================ vector<Matrix_imcomp> cube_para_dev_cis_gene ================================
-	// this is tissue specific
-	sprintf(filename, "%s", "../result_tempdata/para_dev_cis_gene_after.txt");
-	cube_para_dev_cis_gene[etissue_index].save(filename);
-
-
-	//================================== Matrix matrix_para_dev_snp_cellenv ===================================
-	sprintf(filename, "%s", "../result_tempdata/para_dev_snp_cellenv_after.txt");
-	matrix_para_dev_snp_cellenv.save(filename);
-
-
-	//============================== vector<Matrix> cube_para_dev_cellenv_gene ==============================
-	// this is tissue specific
-	sprintf(filename, "%s", "../result_tempdata/para_dev_cellenv_gene_after.txt");
-	cube_para_dev_cellenv_gene[etissue_index].save(filename);
-
-
-	//=============================== Matrix matrix_para_dev_batch_batch_hidden ===============================
-	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_batch_hidden_after.txt");
-	matrix_para_dev_batch_batch_hidden.save(filename);
-
-
-	//=============================== Matrix matrix_para_dev_batch_hidden_gene ================================
-	sprintf(filename, "%s", "../result_tempdata/para_dev_batch_hidden_gene_after.txt");
-	matrix_para_dev_batch_hidden_gene.save(filename);
-	*/
-
-
-
+	printf("aggre: Time used totally is %f seconds.\n", diff);
 
 
 
@@ -957,6 +885,8 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+
+
 	//============== timing starts ================
     gettimeofday(&time_start, NULL);
 
@@ -968,6 +898,7 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 	printf("gd: Time used totally is %f seconds.\n", diff);
+
 
 
 
@@ -1008,6 +939,17 @@ void forward_backward(int etissue_index,
 {
 
 
+
+
+	// DEBUG
+	int deviceID = 1;
+    checkCudaErrors(cudaSetDevice(deviceID));
+
+
+
+
+
+
 	// how to map these pointers:
 	/*
 	dosage_list_pointer --> &snp_dosage_list
@@ -1039,7 +981,7 @@ void forward_backward(int etissue_index,
 
 
 	// DEBUG: this is used to debug the program
-	//char filename[100];
+	char filename[100];
 
 
 
@@ -1061,6 +1003,8 @@ void forward_backward(int etissue_index,
 
 
 
+	long int dimension1, dimension2;
+	long int pos_start;
 	//============== timing ================
 	struct timeval time_start;
 	struct timeval time_end;
@@ -1095,15 +1039,125 @@ void forward_backward(int etissue_index,
 	//============== timing starts ================
 	gettimeofday(&time_start, NULL);
 
+
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
 	//== multiply the input to the matrix
 	gpu_matrix_mul_cis_mul<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis, num_gene, d_snp, d_list_para_cis_gene[etissue_index], d_temp_cis_gene,\
 							d_cis_para_start, d_cis_para_amount, d_cis_snp_start, d_cis_para_index1);
+
+	// BEBUG
+	/*
+	// DEBUG: check d_temp_cis_gene
+	cout << num_para_cis << endl;
+
+	// transfer d_temp_cis_gene back
+	float * temp_list = (float *)malloc(num_para_cis*sizeof(float));
+	checkCudaErrors(cudaMemcpy(temp_list, d_temp_cis_gene, num_para_cis*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/temp_cis_GPU.txt");
+	para_temp_save_var(temp_list, num_para_cis, filename);
+	free(temp_list);
+
+	// copy back the parameters also --> Matrix_imcomplete transfer is correct
+	//vector<Matrix_imcomp> cube_para_cis_gene--> vector<float *> d_list_para_cis_gene;
+	dimension1 = cube_para_cis_gene[etissue_index].get_dimension1();
+	pos_start = 0;
+	for(long int i=0; i<dimension1; i++)
+	{
+		long int amount = cube_para_cis_gene[etissue_index].get_dimension2(i);
+		float * x = cube_para_cis_gene[etissue_index].get_list(i);
+		checkCudaErrors(cudaMemcpy(x, (d_list_para_cis_gene[etissue_index] + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+		pos_start += amount;
+	}
+
+	// calculate d_temp_cis_gene locally
+	temp_list = (float *)malloc(num_para_cis*sizeof(float));
+	long int count = 0;
+	Matrix_imcomp matrix_imcomp_para = cube_para_cis_gene[etissue_index];
+	dimension1 = matrix_imcomp_para.get_dimension1();
+	for(long int i=0; i<dimension1; i++)
+	{
+		int chr = matrix_imcomp_para.get_chr(i);
+		long int start = matrix_imcomp_para.get_sst(i);
+		long int dimension2 = matrix_imcomp_para.get_dimension2(i);
+
+		for(long int j=0; j<dimension2; j++)
+		{
+			if(j == dimension2 - 1)
+			{
+				float par = matrix_imcomp_para.get(i, j);
+				temp_list[count] = 1 * par;			// the last one in the parameter list is for the intercept term
+			}
+			else
+			{
+				long int pos = start + j;
+				float var = (*dosage_list_pointer)[chr-1][pos];
+				float par = matrix_imcomp_para.get(i, j);
+				temp_list[count] = var * par;
+			}
+			count += 1;
+		}
+	}
+	sprintf(filename, "%s", "../result_tempdata/temp_cis_normal.txt");
+	para_temp_save_var(temp_list, num_para_cis, filename);
+	free(temp_list);
+	*/
+
+
 	//== sum matrix
 	gpu_matrix_mul_cis_add<<<(num_gene + 255) / 256 , 256 >>>( num_gene, d_temp_cis_gene, d_gene_rpkm_exp_cis,\
 							d_cis_para_start, d_cis_para_amount, d_cis_snp_start);
+
+	/*
+	// DEBUG
+	float * expr_con_pointer_cis = (float *)calloc( num_gene, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(expr_con_pointer_cis, d_gene_rpkm_exp_cis, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_expr_cis.txt");
+	para_temp_save_var(expr_con_pointer_cis, num_gene, filename);
+	free(expr_con_pointer_cis);
+	*/
+
+	// DEBUG
+	/*
+	// direct computation
+	expr_con_pointer_cis = (float *)calloc( num_gene, sizeof(float) );
+	multi_array_matrix_imcomp(dosage_list_pointer, cube_para_cis_gene[etissue_index], expr_con_pointer_cis);
+	sprintf(filename, "%s", "../result_tempdata/var_expr_cis_normal1.txt");
+	para_temp_save_var(expr_con_pointer_cis, num_gene, filename);
+	free(expr_con_pointer_cis);
+
+	// GPU transfer-back computation
+	dimension1 = cube_para_cis_gene[etissue_index].get_dimension1();
+	pos_start = 0;
+	for(long int j=0; j<dimension1; j++)
+	{
+		long int amount = cube_para_cis_gene[etissue_index].get_dimension2(j);
+		float * x = cube_para_cis_gene[etissue_index].get_list(j);
+		checkCudaErrors(cudaMemcpy(x, (d_list_para_cis_gene[etissue_index] + pos_start), amount*sizeof(float), cudaMemcpyDeviceToHost));
+		pos_start += amount;
+	}
+
+	expr_con_pointer_cis = (float *)calloc( num_gene, sizeof(float) );
+	multi_array_matrix_imcomp(dosage_list_pointer, cube_para_cis_gene[etissue_index], expr_con_pointer_cis);
+
+	sprintf(filename, "%s", "../result_tempdata/var_expr_cis_normal2.txt");
+	para_temp_save_var(expr_con_pointer_cis, num_gene, filename);
+	free(expr_con_pointer_cis);
+	*/
+
+
+	/*
+	// DEBUG
+	gpu_clean<<<(num_gene + 255) / 256 , 256 >>>( num_gene, d_gene_rpkm_exp_cis);
+
+	// DEBUG
+	float * expr_con_pointer_cis = (float *)calloc( num_gene, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(expr_con_pointer_cis, d_gene_rpkm_exp_cis, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_expr_cis.txt");
+	para_temp_save_var(expr_con_pointer_cis, num_gene, filename);
+	free(expr_con_pointer_cis);
+	*/
 
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
@@ -1148,32 +1202,124 @@ void forward_backward(int etissue_index,
 	gettimeofday(&time_start, NULL);
 
 	//===============================================
-	//================ GPU computing ================
+	//================ GPU computing ================ (Apr.27, has been debugged, for both MM and neural hidden layer)
 	//===============================================
 	//==== from SNP to cellenv
-	long int dimension1 = matrix_para_snp_cellenv.get_dimension1();
-	long int dimension2 = matrix_para_snp_cellenv.get_dimension2();
+	dimension1 = matrix_para_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_snp_cellenv.get_dimension2();
 	//== multiply the input to the matrix
-	gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_snp, d_para_snp_cellenv, d_temp_snp_cellenv);
+	//============================
+	// NOTE: grid size
+	//============================
+	//gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_snp, d_para_snp_cellenv, d_temp_snp_cellenv);
+	gpu_matrix_mul_mul<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( dimension1, dimension2, d_snp, d_para_snp_cellenv, d_temp_snp_cellenv);
 	//== sum matrix
 	gpu_matrix_mul_add<<<(dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_snp_cellenv, d_cellenv_hidden_var);
 
+
+	// The problem is in the above routine !!! --> I applied more blocks in a grid that's more than allowed
+
+	/*
+	dimension1 = matrix_para_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_snp_cellenv.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_snp_cellenv.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    float * list_snp = (float *)malloc(num_snp*sizeof(float));
+	checkCudaErrors(cudaMemcpy(list_snp, d_snp, num_snp*sizeof(float), cudaMemcpyDeviceToHost));
+
+    float * list_temp = (float *)malloc(num_cellenv*sizeof(float));
+	for(int i=0; i<dimension1; i++)
+	{
+		list_temp[i] = 0;
+		for(int j=0; j<dimension2; j++)
+		{
+			if(j == dimension2-1)		// the intercept
+			{
+				float para = matrix_para_snp_cellenv.get(i, j);
+				list_temp[i] += 1 * para;
+				break;
+			}
+
+			float para = matrix_para_snp_cellenv.get(i, j);
+			list_temp[i] += list_snp[j] * para;
+		}
+	}
+	sprintf(filename, "%s", "../result_tempdata/var_cellenv_before_normal.txt");
+	para_temp_save_var(list_temp, num_cellenv, filename);
+	free(list_snp);
+	free(list_temp);
+	*/
+
+	
+	/*
+	// DEBUG
+	float * list_temp = (float *)calloc( num_cellenv, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(list_temp, d_cellenv_hidden_var, num_cellenv*sizeof(float), cudaMemcpyDeviceToHost));
+	neuralnet_ac_func(list_temp, num_cellenv);
+	sprintf(filename, "%s", "../result_tempdata/var_cellenv_after_normal.txt");
+	para_temp_save_var(list_temp, num_cellenv, filename);
+	free(list_temp);
+	*/
+
+
+
 	//==== neuralnet
 	gpu_neuralnet_ac_func<<<(num_cellenv + 255) / 256 , 256 >>>( num_cellenv , d_cellenv_hidden_var);
+
+
+
+	/*
+	// DEBUG
+	list_temp = (float *)calloc( num_cellenv, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(list_temp, d_cellenv_hidden_var, num_cellenv*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_cellenv_after_GPU.txt");
+	para_temp_save_var(list_temp, num_cellenv, filename);
+	free(list_temp);
+	*/
+
 
 	//==== from cellenv to gene expression
 	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
 	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
 	//== multiply the input to the matrix
-	float * d_para_cellenv_gene = d_list_para_cellenv_gene[etissue_index];
-	gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_cellenv_hidden_var, d_para_cellenv_gene, d_temp_cellenv_gene);
+	gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_cellenv_hidden_var, d_list_para_cellenv_gene[etissue_index], d_temp_cellenv_gene);
 	//== sum matrix
 	gpu_matrix_mul_add<<< (dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_cellenv_gene, d_gene_rpkm_exp_cellenv);
+
+
+	/*
+	// DEBUG
+	float * expr_con_pointer_cellenv = (float *)calloc( num_gene, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(expr_con_pointer_cellenv, d_gene_rpkm_exp_cellenv, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_expr_cellenv.txt");
+	para_temp_save_var(expr_con_pointer_cellenv, num_gene, filename);
+	free(expr_con_pointer_cellenv);
+	*/
+
+
+	/*
+	// DEBUG
+	gpu_setnum<<<(num_gene + 255) / 256 , 256 >>>( num_gene, d_gene_rpkm_exp_cellenv, 1);
+
+	// DEBUG
+	float * expr_con_pointer_cellenv = (float *)calloc( num_gene, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(expr_con_pointer_cellenv, d_gene_rpkm_exp_cellenv, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_expr_cellenv.txt");
+	para_temp_save_var(expr_con_pointer_cellenv, num_gene, filename);
+	free(expr_con_pointer_cellenv);
+	*/
 
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 	printf("cellenv: Time used totally is %f seconds.\n", diff);
+
+
 
 
 
@@ -1222,8 +1368,73 @@ void forward_backward(int etissue_index,
 	//== sum matrix
 	gpu_matrix_mul_add<<<(dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_batch_batch_hidden, d_batch_hidden_var);
 
+
+	// probably I'll need to transfer every intermediate stuff back
+
+
+	/*
+	// calculate the var_batch_hidden and save it
+	//Matrix matrix_para_batch_batch_hidden --> float * d_para_batch_batch_hidden
+	dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
+	dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_batch_batch_hidden.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_batch_batch_hidden + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    float * list_batch = (float *)malloc(num_batch*sizeof(float));
+	checkCudaErrors(cudaMemcpy(list_batch, d_batch_var, num_batch*sizeof(float), cudaMemcpyDeviceToHost));
+
+    float * list_temp = (float *)malloc(num_batch_hidden*sizeof(float));
+	for(int i=0; i<dimension1; i++)
+	{
+		list_temp[i] = 0;
+		for(int j=0; j<dimension2; j++)
+		{
+			if(j == dimension2-1)		// the intercept
+			{
+				float para = matrix_para_batch_batch_hidden.get(i, j);
+				list_temp[i] += 1 * para;
+				break;
+			}
+
+			float para = matrix_para_batch_batch_hidden.get(i, j);
+			list_temp[i] += list_batch[j] * para;
+		}
+	}
+	sprintf(filename, "%s", "../result_tempdata/var_batch_hidden_before_normal.txt");
+	para_temp_save_var(list_temp, num_batch_hidden, filename);
+	free(list_batch);
+	free(list_temp);
+	*/
+
+
+	/*
+	// DEBUG
+	float * list_temp = (float *)calloc( num_batch_hidden, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(list_temp, d_batch_hidden_var, num_batch_hidden*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_batch_hidden_before_GPU.txt");
+	para_temp_save_var(list_temp, num_batch_hidden, filename);
+	free(list_temp);
+	*/
+
+
 	//==== neuralnet
 	gpu_neuralnet_ac_func<<<(num_batch_hidden + 255) / 256 , 256 >>>( num_batch_hidden , d_batch_hidden_var);
+
+
+	/*
+	// DEBUG
+	list_temp = (float *)calloc( num_batch_hidden, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(list_temp, d_batch_hidden_var, num_batch_hidden*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_batch_hidden_after.txt");
+	para_temp_save_var(list_temp, num_batch_hidden, filename);
+	free(list_temp);
+	*/
+
+
 
 	//==== from batch_hidden to gene
 	dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
@@ -1233,10 +1444,20 @@ void forward_backward(int etissue_index,
 	//== sum matrix
 	gpu_matrix_mul_add<<< (dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_batch_hidden_gene, d_gene_rpkm_exp_batch);
 
+	/*
+	// DEBUG
+	float * expr_con_pointer_batch = (float *)calloc( num_gene, sizeof(float) );
+	checkCudaErrors(cudaMemcpy(expr_con_pointer_batch, d_gene_rpkm_exp_batch, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_expr_batch.txt");
+	para_temp_save_var(expr_con_pointer_batch, num_gene, filename);
+	free(expr_con_pointer_batch);
+	*/
+
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 	printf("batch: Time used totally is %f seconds.\n", diff);
+
 
 
 
@@ -1287,7 +1508,7 @@ void forward_backward(int etissue_index,
 		error_list[i] = expr_con_pointer[i] - (*expr_list_pointer)[i];
 	}
     checkCudaErrors(cudaMemcpy( d_error_list, error_list, num_gene*sizeof(float), cudaMemcpyHostToDevice));
-    */
+	*/
 
 
 	//============== timing starts ================
@@ -1301,11 +1522,38 @@ void forward_backward(int etissue_index,
 	gpu_merge_list_3<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_gene_rpkm_exp_cis, d_gene_rpkm_exp_cellenv, d_gene_rpkm_exp_batch);
 	gpu_error_cal<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_error_list, d_gene_rpkm_exp_cis, d_expr);
 
+	/*
+    // DEBUG
+    float * error_list = (float *)malloc(num_gene*sizeof(float));
+    float * expr_list = (float *)malloc(num_gene*sizeof(float));
+	checkCudaErrors(cudaMemcpy(expr_con_pointer, d_gene_rpkm_exp_cis, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(error_list, d_error_list, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(expr_list, d_expr, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+	sprintf(filename, "%s", "../result_tempdata/var_expr_exp.txt");
+	para_temp_save_var(expr_con_pointer, num_gene, filename);
+	sprintf(filename, "%s", "../result_tempdata/var_expr_real.txt");
+	para_temp_save_var(expr_list, num_gene, filename);
+	sprintf(filename, "%s", "../result_tempdata/var_expr_error.txt");
+	para_temp_save_var(error_list, num_gene, filename);
+	free(expr_list);
+	*/
+
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
 	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
 	printf("merge: Time used totally is %f seconds.\n", diff);
 
+
+
+	//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//###########################################################
+	//===========================================================
+	// NOTE: now the forward process is correct!! (Apr.27, 2016)
+	//===========================================================
+	//###########################################################
+	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+	//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
 
 
@@ -1382,14 +1630,18 @@ void forward_backward(int etissue_index,
 	//
 	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
 	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
-	d_para_cellenv_gene = d_list_para_cellenv_gene[etissue_index];
-	gpu_backprop_error_prop<<<( num_cellenv + 255 )/256 , 256 >>>( dimension1, dimension2, d_para_cellenv_gene, d_error_list, d_cellenv_hidden_var);
+	gpu_backprop_error_prop<<<( num_cellenv + 255 )/256 , 256 >>>( dimension1, dimension2, d_list_para_cellenv_gene[etissue_index], d_error_list, d_cellenv_hidden_var);
 	//
 	gpu_neuralnet_ac_func_dev<<<( num_cellenv + 255 )/256 , 256 >>>( num_cellenv, d_cellenv_hidden_var);
 	//
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
-	gpu_backprop_last_layer<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+	//gpu_backprop_last_layer<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+	//==============================================
+	// NOTE: maximum number of blocks in a grid !!!
+	//==============================================
+	gpu_backprop_last_layer<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+
 
 	//============== timing ends ================
 	gettimeofday(&time_end, NULL);
@@ -1459,6 +1711,22 @@ void forward_backward(int etissue_index,
 
 void regularization(int etissue_index)
 {
+
+
+
+
+
+	// DEBUG
+	int deviceID = 1;
+    checkCudaErrors(cudaSetDevice(deviceID));
+
+
+
+
+
+
+
+
 	cout << "[@@] entering the regularization routine..." << endl;
 
 	// there are several classes of prior knowledge that we need to consider
@@ -1650,6 +1918,12 @@ void gradient_descent(int etissue_index)
 
 
 
+	// DEBUG
+	int deviceID = 1;
+    checkCudaErrors(cudaSetDevice(deviceID));
+
+
+
 
 
 
@@ -1738,18 +2012,17 @@ void gradient_descent(int etissue_index)
 
 
 
+
+
+
+
 // calculate the loglikelihood for all the samples in one tissue
 float cal_loglike(string etissue)
 {
 	cout << "now calculating the log-likelihood..." << endl;
 
 	float loglike = 0;
-	int etissue_index = etissue_index_map[etissue];
-
-	for(int pos = 0; pos < esample_tissue_rep[etissue].size(); pos++)
-	{
-		loglike += forward_loglike_testerror(0, etissue, pos, &snp_dosage_list, gene_rpkm_exp, cellenv_hidden_var, batch_var, batch_hidden_var);	// indicator=0 --> loglike; indicator=1 --> testerror
-	}
+	loglike = forward_loglike_testerror(0, etissue, &snp_dosage_list, gene_rpkm_exp, cellenv_hidden_var, batch_var, batch_hidden_var);	// indicator=0 --> loglike; indicator=1 --> testerror
 
 	return loglike;
 }
@@ -1758,153 +2031,182 @@ float cal_loglike(string etissue)
 
 
 // forward process, accumulated the errors
-float forward_loglike_testerror(int indicator, string etissue, int pos, array<float *, NUM_CHR> * dosage_list_pointer, float * expr_con_pointer, float * cellenv_con_pointer, float * batch_list_pointer, float * batch_hidden_con_pointer)
+float forward_loglike_testerror(int indicator, string etissue, array<float *, NUM_CHR> * dosage_list_pointer, float * expr_con_pointer, float * cellenv_con_pointer, float * batch_list_pointer, float * batch_hidden_con_pointer)
 {
 	float result = 0;
+	float * d_result;
+	checkCudaErrors(cudaMalloc(&d_result, 1*sizeof(float)));
+	gpu_clean<<<( 1 + 255 )/256 , 256 >>>( 1 , d_result );
+
 	int etissue_index = etissue_index_map[etissue];
 
-
-	//========================================================================
-	// prepare all the containers, and the input variables
-	//========================================================================
-	//========================================================================
 	//=================================================================================================================
 	//******************************************* loglike or testerror ************************************************
 	//=================================================================================================================
-	string esample;
+	int amount_sample;
 	if(indicator == 0)	// training set, loglike
 	{
-		esample = esample_tissue_rep[etissue][pos];
+		amount_sample = esample_tissue_rep[etissue].size();
 	}
 	else 				// testing set, testerror
 	{
-		esample = esample_tissue_rep_test[etissue][pos];
-	}
-	string individual = sample_to_individual(esample);
-	cout << "loglike: current sample #" << pos+1 << ": " << esample << endl;
-
-
-	// make it compatible with the old code
-	//array<float *, NUM_CHR> * dosage_list_pointer = &snp_dosage_list;
-	//=================================================================================================================
-	//******************************************* loglike or testerror ************************************************
-	//=================================================================================================================
-	vector<float> * expr_list_pointer;
-	if(indicator == 0)	// training set, loglike
-	{
-		expr_list_pointer = &eQTL_tissue_rep[etissue][esample];
-	}
-	else 				// testing set, testerror
-	{
-		expr_list_pointer = &eQTL_tissue_rep_test[etissue][esample];
-	}
-	//float * expr_con_pointer = gene_rpkm_exp;
-	//float * cellenv_con_pointer = cellenv_hidden_var;
-	//float * batch_list_pointer = batch_var;
-	//float * batch_hidden_con_pointer = batch_hidden_var;
-
-
-
-	//=================================================== init ============================================================
-	// get the: 0. esample and individual; 1. genotype; 2. expression data; 3. batch variables
-	// to: 1. forward_backward propagation;
-	// genotype dosage data
-	//cout << "getting the dosage data for individual #" << individual << endl;
-	snp_dosage_load(dosage_list_pointer, individual);  // snp dosage data for one individual across all chromosomes
-	// expression rpkm data: eQTL_tissue_rep[etissue][esample]
-	//cout << "we have this amount of genes expressed in this individual:" << eQTL_tissue_rep[etissue][esample].size() << endl;
-	// and the batch variable for this individual and this sample
-	int num_batch_individual = batch_individual[individual].size();
-	int index = 0;
-	for(int i=0; i<num_batch_individual; i++)
-	{
-		float value = batch_individual[individual][i];
-		batch_list_pointer[index] = value;
-		index++;
-	}
-	int num_batch_sample = batch_sample[esample].size();
-	for(int i=0; i<num_batch_sample; i++)
-	{
-		float value = batch_sample[esample][i];
-		batch_list_pointer[index] = value;
-		index++;
+		amount_sample = esample_tissue_rep_test[etissue].size();
 	}
 
 
-	//========================================================================
-	// forward-propogation (cis-; cell env; batch)
-	//========================================================================
-	//========================================================================
-
-	// ****************************** [part1] cis- *********************************
-	// for cis-, two issues:
-	// 1. if this is a XYMT gene, we don't have signal from it's cis- SNPs (not consider currently);
-	// 2. we use (gene_cis_index[gene].second - gene_cis_index[gene].first + 1) as the length of the cis- parameter array
-	float * expr_con_pointer_cis = (float *)calloc( num_gene, sizeof(float) );
-	multi_array_matrix_imcomp(dosage_list_pointer, cube_para_cis_gene[etissue_index], expr_con_pointer_cis);
-
-
-	// ********************* [part2] cell env relevant parameters *********************
-	// from snp to cell env variables
-	float * expr_con_pointer_cellenv = (float *)calloc( num_gene, sizeof(float) );
-	multi_array_list_matrix(dosage_list_pointer, matrix_para_snp_cellenv, cellenv_con_pointer);
-
-	//$$$$$$$$$$$ perform the activation function here (logistic or something else) $$$$$$$$$$$$
-	neuralnet_ac_func(cellenv_con_pointer, num_cellenv);
-
-	// from cell env variables to genes
-	multi_array_matrix(cellenv_con_pointer, cube_para_cellenv_gene[etissue_index], expr_con_pointer_cellenv);
-
-
-	// ********************* [part3] linear or non-linear batches *********************
-	float * expr_con_pointer_batch = (float *)calloc( num_gene, sizeof(float) );
-	// from original batch to hidden batch
-	multi_array_matrix(batch_list_pointer, matrix_para_batch_batch_hidden, batch_hidden_con_pointer);
-
-	//$$$$$$$$$$$ perform the activation function here (logistic or something else) $$$$$$$$$$$$
-	neuralnet_ac_func(batch_hidden_con_pointer, num_batch_hidden);
-
-	// from hidden batch to genes
-	multi_array_matrix(batch_hidden_con_pointer, matrix_para_batch_hidden_gene, expr_con_pointer_batch);
-
-
-
-	// ********************* [end] merge the signal from three pathways here, to expr_con_pointer *********************
-	for(long int i=0; i<num_gene; i++)
+	for(int pos = 0; pos < amount_sample; pos++)
 	{
-		expr_con_pointer[i] = expr_con_pointer_cis[i] + expr_con_pointer_cellenv[i] + expr_con_pointer_batch[i];
-	}
-	free(expr_con_pointer_cis);
-	free(expr_con_pointer_cellenv);
-	free(expr_con_pointer_batch);
-
-
-
-	// error is the thing actually needed
-	//=================================================================================================================
-	//******************************************* loglike or testerror ************************************************
-	//=================================================================================================================
-	if(indicator == 0)		// training set, loglike
-	{
-		float loglike = 0;
-		for(long int i=0; i<num_gene; i++)
+		//=================================================================================================================
+		//******************************************* loglike or testerror ************************************************
+		//=================================================================================================================
+		string esample;
+		if(indicator == 0)	// training set, loglike
 		{
-			float error = expr_con_pointer[i] - (*expr_list_pointer)[i];
-			// save the loglike
-			loglike -= pow(error, 2.0);
+			esample = esample_tissue_rep[etissue][pos];
 		}
-		result = loglike;
-	}
-	else 					// testing error, testerror
-	{
-		float testerror = 0;
-		for(long int i=0; i<num_gene; i++)
+		else 				// testing set, testerror
 		{
-			float error = abs(expr_con_pointer[i] - (*expr_list_pointer)[i]);
-			testerror += error;
+			esample = esample_tissue_rep_test[etissue][pos];
 		}
-		result = testerror;
-	}
+		string individual = sample_to_individual(esample);
+		cout << "======== current sample #" << pos+1 << ": " << esample << endl;
+
+
+		int snp_index = d_snp_index_map[individual];
+		d_snp = d_snp_list[snp_index];
+
+		int batch_index = d_batch_index_map[esample];
+		d_batch_var = d_batch_list[batch_index];
+
+		//=================================================================================================================
+		//******************************************* loglike or testerror ************************************************
+		//=================================================================================================================
+		if(indicator == 0)	// training set, loglike
+		{
+			int sample_index = d_sample_index_map[esample];
+			d_expr = d_sample_list[sample_index];
+		}
+		else 				// testing set, testerror
+		{
+			int sample_index = d_sample_test_index_map[esample];
+			d_expr = d_sample_test_list[sample_index];
+		}
+
+
+
+
+
+		//========================================================================
+		// forward-propogation (cis-; cell env; batch)
+		//========================================================================
+		//========================================================================
+		long int dimension1, dimension2;
+
+		//========================================================================
+		// ****************************** [part1] cis- *********************************
+		//===============================================
+		//================ GPU computing ================
+		//===============================================
+		//== multiply the input to the matrix
+		gpu_matrix_mul_cis_mul<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis, num_gene, d_snp, d_list_para_cis_gene[etissue_index], d_temp_cis_gene,\
+								d_cis_para_start, d_cis_para_amount, d_cis_snp_start, d_cis_para_index1);
+		//== sum matrix
+		gpu_matrix_mul_cis_add<<<(num_gene + 255) / 256 , 256 >>>( num_gene, d_temp_cis_gene, d_gene_rpkm_exp_cis,\
+								d_cis_para_start, d_cis_para_amount, d_cis_snp_start);
+
+
+		// ********************* [part2] cell env relevant parameters *********************
+		//===============================================
+		//================ GPU computing ================ (Apr.27, has been debugged, for both MM and neural hidden layer)
+		//===============================================
+		//==== from SNP to cellenv
+		dimension1 = matrix_para_snp_cellenv.get_dimension1();
+		dimension2 = matrix_para_snp_cellenv.get_dimension2();
+		//== multiply the input to the matrix
+		//============================
+		// NOTE: grid size
+		//============================
+		//gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_snp, d_para_snp_cellenv, d_temp_snp_cellenv);
+		gpu_matrix_mul_mul<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( dimension1, dimension2, d_snp, d_para_snp_cellenv, d_temp_snp_cellenv);
+		//== sum matrix
+		gpu_matrix_mul_add<<<(dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_snp_cellenv, d_cellenv_hidden_var);
+
+		//==== neuralnet
+		gpu_neuralnet_ac_func<<<(num_cellenv + 255) / 256 , 256 >>>( num_cellenv , d_cellenv_hidden_var);
+
+		//==== from cellenv to gene expression
+		dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
+		dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
+		//== multiply the input to the matrix
+		gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_cellenv_hidden_var, d_list_para_cellenv_gene[etissue_index], d_temp_cellenv_gene);
+		//== sum matrix
+		gpu_matrix_mul_add<<< (dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_cellenv_gene, d_gene_rpkm_exp_cellenv);
+
+
+		// ********************* [part3] linear or non-linear batches *********************
+		//===============================================
+		//================ GPU computing ================
+		//===============================================
+		//==== from batch to batch_hidden
+		dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
+		dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
+		//== multiply the input to the matrix
+		gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_batch_var, d_para_batch_batch_hidden, d_temp_batch_batch_hidden);
+		//== sum matrix
+		gpu_matrix_mul_add<<<(dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_batch_batch_hidden, d_batch_hidden_var);
+
+		//==== neuralnet
+		gpu_neuralnet_ac_func<<<(num_batch_hidden + 255) / 256 , 256 >>>( num_batch_hidden , d_batch_hidden_var);
+
+		//==== from batch_hidden to gene
+		dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
+		dimension2 = matrix_para_batch_hidden_gene.get_dimension2();
+		//== multiply the input to the matrix
+		gpu_matrix_mul_mul<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_batch_hidden_var, d_para_batch_hidden_gene, d_temp_batch_hidden_gene);
+		//== sum matrix
+		gpu_matrix_mul_add<<< (dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_batch_hidden_gene, d_gene_rpkm_exp_batch);
+
+
+		// ********************* [end] merge the signal from three pathways here, to expr_con_pointer *********************
+		//==========================================================================
+		//================ GPU computing (without data transfering) ================
+		//==========================================================================
+		// 1. merge the three in GPU;
+		// 2. calculate the error in GPU
+		gpu_merge_list_3<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_gene_rpkm_exp_cis, d_gene_rpkm_exp_cellenv, d_gene_rpkm_exp_batch);
+		gpu_error_cal<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_error_list, d_gene_rpkm_exp_cis, d_expr);
+
+
+
+
+
+
+
+		// error is the thing actually needed, and by now we have it
+		//=================================================================================================================
+		//******************************************* loglike or testerror ************************************************
+		//=================================================================================================================
+		if(indicator == 0)		// training set, loglike
+		{
+			// I will use "d_gene_rpkm_exp_cis" as the temp list
+			gpu_cal_loglike_func<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_error_list, d_gene_rpkm_exp_cis);
+			gpu_cal_loglike_add<<< (1 + 255) / 256 , 256 >>>( 1, num_gene, d_gene_rpkm_exp_cis, d_result);
+		}
+		else 					// testing error, testerror
+		{
+			// I will use "d_gene_rpkm_exp_cis" as the temp list
+			gpu_cal_testerror_func<<< (num_gene + 255) / 256 , 256 >>>( num_gene, d_error_list, d_gene_rpkm_exp_cis);
+			// the same one as loglike func
+			gpu_cal_loglike_add<<< (1 + 255) / 256 , 256 >>>( 1, num_gene, d_gene_rpkm_exp_cis, d_result);
+		}
+
+	}// leave this sample, move on to next sample (in this tissue)
+
+
+
+	// transfer back the final result from GPU (loglike or test error)
+	checkCudaErrors(cudaMemcpy(&result, d_result, 1*sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaFree(d_result));
 
 
 	return result;
@@ -1912,21 +2214,17 @@ float forward_loglike_testerror(int indicator, string etissue, int pos, array<fl
 
 
 
+
+
+
 // testing error for one tissue
 // type: MAE or AE (mean absolute error or absolute error)
 float cal_testerror(string etissue)
 {
-	float testerror = 0;
-
 	cout << "now calculating the testing error (for the current tissue)..." << endl;
 
-	int etissue_index = etissue_index_map[etissue];
-
-	for(int pos = 0; pos < esample_tissue_rep_test[etissue].size(); pos++)
-	{
-		testerror += forward_loglike_testerror(1, etissue, pos, &snp_dosage_list, gene_rpkm_exp, cellenv_hidden_var, batch_var, batch_hidden_var);	// indicator=0 --> loglike; indicator=1 --> testerror
-	}
-
+	float testerror = 0;
+	testerror = forward_loglike_testerror(1, etissue, &snp_dosage_list, gene_rpkm_exp, cellenv_hidden_var, batch_var, batch_hidden_var);	// indicator=0 --> loglike; indicator=1 --> testerror
 
 	return testerror;
 }

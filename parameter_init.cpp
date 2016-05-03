@@ -127,8 +127,8 @@ void para_init()
 	{
 		fputs("File error\n", stderr); exit (1);
 	}
-	long input_length = 5000000000;
-	char * input = (char *)malloc( sizeof(char) * input_length );
+	long input_length = 1000000000;	// NOTE: this is for real data
+	char * input = (char *)malloc( input_length*sizeof(char) );
 	int count = 0;
 	while(fgets(input, input_length, file_in) != NULL)
 	{
@@ -150,6 +150,7 @@ void para_init()
 		count++;
 	}
 	fclose(file_in);
+
 
 	//=============== from cell env variables to genes ===============
 	// vector<vector<float *>> para_cellenv_gene
