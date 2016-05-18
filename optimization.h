@@ -81,8 +81,10 @@ extern float * d_gene_rpkm_exp_cellenv;  	// with length "num_gene"
 extern float * d_gene_rpkm_exp_batch;  	// with length "num_gene"
 extern float * d_error_list;				// with length "num_gene"
 extern float * d_cellenv_hidden_var;  // with length "num_cellenv"
+extern float * d_cellenv_hidden_var_backerror;  // with length "num_cellenv"
 extern float * d_batch_var;  // with length "num_batch"
 extern float * d_batch_hidden_var;  // with length "num_batch_hidden"
+extern float * d_batch_hidden_var_backerror;  		// with length "num_batch_hidden"
 // for cis- range query
 extern long int * d_cis_para_start;				// with length "num_gene", start pos in para (dev) list of this gene
 extern long int * d_cis_snp_start;				// with length "num_gene", start pos in snp list of this gene

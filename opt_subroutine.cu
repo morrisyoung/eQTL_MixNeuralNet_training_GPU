@@ -26,6 +26,7 @@
 #include <helper_cuda.h>
 #include <helper_functions.h> // helper functions for SDK examples
 #include "opt_subroutine_gpu.cuh"
+#include "opt_subroutine_gpu_mm.cuh"
 
 #include <sys/time.h>
 #include <time.h>       /* clock_t, clock, CLOCKS_PER_SEC */
@@ -50,16 +51,6 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	int etissue_index = etissue_index_map[etissue];
 	long int dimension1;
 	long int dimension2;
-
-
-
-
-
-	// DEBUG
-	int deviceID = 1;
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-
 
 
 
@@ -96,7 +87,6 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
-
 	//******************* initialize all the parameter derivatives (as 0) *******************
 	/*
 	//===============================================
@@ -120,11 +110,19 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
+	// temp variables for GPU timing:
+	// Allocate CUDA events that we'll use for timing
+	cudaEvent_t start;
+	cudaEventCreate(&start);
+	cudaEvent_t stop;
+	cudaEventCreate(&stop);
+    float msecTotal = 0.0f;
+
+
+
+
 	//============== timing starts ================
-    struct timeval time_start;
-    struct timeval time_end;
-    double diff;
-    gettimeofday(&time_start, NULL);
+	cudaEventRecord(start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -135,7 +133,11 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-	gpu_clean<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_dev_snp_cellenv);
+	//gpu_clean<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_dev_snp_cellenv);
+	//============================
+	// NOTE: grid size
+	//============================
+	gpu_clean<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( (dimension1*dimension2) , d_para_dev_snp_cellenv);
 
 	//vector<Matrix> cube_para_dev_cellenv_gene --> vector<float *> d_list_para_dev_cellenv_gene
 	dimension1 = cube_para_dev_cellenv_gene[etissue_index].get_dimension1();
@@ -154,9 +156,14 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	gpu_clean<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_dev_batch_hidden_gene);
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("clean: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
@@ -167,21 +174,26 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	for(int count=0; count<batch_size; count++)
 	{
 
-		// TODO: I will save the time on dosage loading/transmitting, and expression loading and transmitting
-		// TODO:
-		// 1. float * d_batch_var
-		// 2. float * d_expr
+
+
+
+		// temp variables for GPU timing:
+		// Allocate CUDA events that we'll use for timing
+		cudaEvent_t start;
+		cudaEventCreate(&start);
+		cudaEvent_t stop;
+		cudaEventCreate(&stop);
+	    float msecTotal = 0.0f;
+
+
 
 
 		//==========================================================================================================
 		//========================================== CPU data preparation ==========================================
 		//==========================================================================================================
 		//============== timing starts ================
-    	struct timeval time_start;
-    	struct timeval time_end;
-    	double diff;
-    	gettimeofday(&time_start, NULL);
-
+	    // Record the start event
+		cudaEventRecord(start, NULL);
 
 		int pos = (pos_start + count) % (num_esample);
 		string esample = esample_tissue_rep[etissue][pos];
@@ -203,9 +215,16 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		// and the batch variable for this individual and this sample
 
 		//============== timing ends ================
-		gettimeofday(&time_end, NULL);
-		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-		printf("pre- Time used totally is %f seconds.\n", diff);
+	    // Record the stop event
+		cudaEventRecord(stop, NULL);
+	    // Wait for the stop event to complete
+		cudaEventSynchronize(stop);
+		// Timing
+		cudaEventElapsedTime(&msecTotal, start, stop);
+	    // Compute and print the performance
+		printf("pre- Time used totally is %.3f msec.\n", msecTotal);
+
+
 
 
 		/*
@@ -241,7 +260,8 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		//========================================== GPU data preparation ==========================================
 		//==========================================================================================================
 		//============== timing starts ================
-		gettimeofday(&time_start, NULL);
+		// Record the start event
+		cudaEventRecord(start, NULL);
 
 		// TODO GPU: load everything into GPU memory, and make them addressable
 		// NOTE: CPU should have all the data, and GPU has also another copy of these data
@@ -252,7 +272,9 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		// checkCudaErrors(cudaMemcpy( d_etissue_index_p, &etissue_index, 1*sizeof(int), cudaMemcpyHostToDevice));
 
     	/*
+    	//===================
 		//==== float * d_snp
+    	//===================
 		long int pos_start = 0;
 		for(int i=0; i<NUM_CHR; i++)  // across all the chromosomes
 		{
@@ -266,18 +288,26 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		d_snp = d_snp_list[snp_index];
 
 		//============== timing ends ================
-		gettimeofday(&time_end, NULL);
-		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-		printf("dosage GPU: Time used totally is %f seconds.\n", diff);
+	    // Record the stop event
+		cudaEventRecord(stop, NULL);
+	    // Wait for the stop event to complete
+		cudaEventSynchronize(stop);
+		// Timing
+		cudaEventElapsedTime(&msecTotal, start, stop);
+	    // Compute and print the performance
+		printf("dosage GPU: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
 
 		//============== timing starts ================
-		gettimeofday(&time_start, NULL);
+		// Record the start event
+		cudaEventRecord(start, NULL);
 
 		/*
+		//=========================
 		//==== float * d_batch_var
+		//=========================
 		checkCudaErrors(cudaMemcpy( d_batch_var, batch_var, num_batch*sizeof(float), cudaMemcpyHostToDevice));
 		*/
 
@@ -285,19 +315,28 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		d_batch_var = d_batch_list[batch_index];
 
 		//============== timing ends ================
-		gettimeofday(&time_end, NULL);
-		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-		printf("batch GPU: Time used totally is %f seconds.\n", diff);
+	    // Record the stop event
+		cudaEventRecord(stop, NULL);
+	    // Wait for the stop event to complete
+		cudaEventSynchronize(stop);
+		// Timing
+		cudaEventElapsedTime(&msecTotal, start, stop);
+	    // Compute and print the performance
+		printf("batch GPU: Time used totally is %.3f msec.\n", msecTotal);
+
 
 
 
 
 
 		//============== timing starts ================
-    	gettimeofday(&time_start, NULL);
+		// Record the start event
+		cudaEventRecord(start, NULL);
 
     	/*
+		//====================
 		//==== float * d_expr
+		//====================
 		float * expr_list = (float *)malloc(num_gene*sizeof(float));
 		for(int i=0; i<num_gene; i++)
 		{
@@ -311,19 +350,22 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 		d_expr = d_sample_list[sample_index];
 
 		//============== timing ends ================
-		gettimeofday(&time_end, NULL);
-		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-		printf("expr: Time used totally is %f seconds.\n", diff);
-
-
+	    // Record the stop event
+		cudaEventRecord(stop, NULL);
+	    // Wait for the stop event to complete
+		cudaEventSynchronize(stop);
+		// Timing
+		cudaEventElapsedTime(&msecTotal, start, stop);
+	    // Compute and print the performance
+		printf("expr: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
 
 
 		//============== timing starts ================
-    	gettimeofday(&time_start, NULL);
-
+		// Record the start event
+		cudaEventRecord(start, NULL);
 
 		forward_backward(etissue_index,
 						&snp_dosage_list,
@@ -343,30 +385,21 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 		//============== timing ends ================
-		gettimeofday(&time_end, NULL);
-		diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-		printf("(forward_backward) Time used totally is %f seconds.\n", diff);
+	    // Record the stop event
+		cudaEventRecord(stop, NULL);
+	    // Wait for the stop event to complete
+		cudaEventSynchronize(stop);
+		// Timing
+		cudaEventElapsedTime(&msecTotal, start, stop);
+	    // Compute and print the performance
+		printf("(forward_backward) Time used totally is %.3f msec.\n", msecTotal);
 
-		printf("###### %f\n", diff);
+		// for extracting this item from log file
+		printf("###### %.3f\n", msecTotal);
 
 
 
 
-
-
-		// DEBUG
-		// for this sample (or for this individual as we fix the tissue type currenlty):
-		// I want to check the genotype of this individual, as the problem seems to come up there!!!
-		// save: individual ID; genotype
-		// debug here and also in the subroutine
-		// for(long int i=0; i<snp_name_list[0].size(); i++)
-		// {
-		// 	float dosage = snp_dosage_list[0][i];
-		// 	if(isnan(dosage))
-		// 	{
-		// 		cout << individual << " " << i << " " << dosage << endl;
-		// 	}
-		// }
 
 
 		// iterating in this mini-batch
@@ -522,7 +555,8 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	*/
 
 	//============== timing starts ================
-    gettimeofday(&time_start, NULL);
+	// Record the start event
+	cudaEventRecord(start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -534,7 +568,11 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-	gpu_scale<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , factor, d_para_dev_snp_cellenv);
+	//gpu_scale<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , factor, d_para_dev_snp_cellenv);
+	//============================
+	// NOTE: grid size
+	//============================
+	gpu_scale<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( (dimension1*dimension2) , factor, d_para_dev_snp_cellenv);
 
 	//vector<Matrix> cube_para_dev_cellenv_gene --> vector<float *> d_list_para_dev_cellenv_gene
 	dimension1 = cube_para_dev_cellenv_gene[etissue_index].get_dimension1();
@@ -552,206 +590,14 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 	gpu_scale<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , factor, d_para_dev_batch_hidden_gene);
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("aggre: Time used totally is %f seconds.\n", diff);
-
-
-
-
-
-
-
-    /*
-    //==========================================================
-    //======== GPU testing routine: TODO-OR-NOT testing ========
-    //==========================================================
-	//============== timing starts ================
-    struct timeval time_start;
-    struct timeval time_end;
-    double diff;
-    gettimeofday(&time_start, NULL);
-
-	matrix_para_dev_snp_cellenv.scale( 1.0 / batch_size );
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
-
-    printf("========================================================================================\n");
-    printf("start testing the GPU devices...\n");
-	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
-	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-	//matrix_para_dev_snp_cellenv.scale( 1.0 / batch_size );
-
-	float factor = 1.0 / batch_size;
-
-    int deviceID = 0;
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-    float * d_x;
-    checkCudaErrors(cudaMalloc(&d_x, (dimension1*dimension2)*sizeof(float)));
-
-    // memory copy
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
-    	long int pos_start = i * dimension2;
-    	checkCudaErrors(cudaMemcpy( (d_x + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
-    }
-
-	//============== timing starts ================
-    gettimeofday(&time_start, NULL);
-
-	gpu_scale<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , factor, d_x);
-	//checkCudaErrors(cudaMemcpy(x, d_x, dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
-
-    checkCudaErrors(cudaFree(d_x));
-
-    checkCudaErrors(cudaDeviceReset());
-    printf("========================================================================================\n");
-    */
-
-
-
-
-
-	/*
-    //====================================================
-    //======== GPU testing routine: speed testing ========
-    //====================================================
-	// (Apr.17) working on "matrix_para_dev_snp_cellenv"
-	// Matrix matrix_para_dev_snp_cellenv;
-	//============== timing starts ================
-    struct timeval time_start;
-    struct timeval time_end;
-    double diff;
-    gettimeofday(&time_start, NULL);
-
-	matrix_para_dev_snp_cellenv.scale( 1.0 / batch_size );
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
-
-
-    printf("========================================================================================\n");
-    printf("start testing the GPU devices...\n");
-	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
-	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-	//matrix_para_dev_snp_cellenv.scale( 1.0 / batch_size );
-
-	float factor = 1.0 / batch_size;
-
-    int deviceID = 0;
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-    float * d_x;
-    checkCudaErrors(cudaMalloc(&d_x, dimension2*sizeof(float)));
-
-
-	//============== timing starts ================
-    gettimeofday(&time_start, NULL);
-
-
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
-    	checkCudaErrors(cudaMemcpy(d_x, x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
-	    gpu_scale<<<(dimension2+255)/256, 256>>>(dimension2, factor, d_x);
-	    checkCudaErrors(cudaMemcpy(x, d_x, dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-    }
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("Time used totally is %f seconds.\n", diff);
-
-    checkCudaErrors(cudaFree(d_x));
-
-    checkCudaErrors(cudaDeviceReset());
-    printf("========================================================================================\n");
-    */
-
-
-
-    //========================================================
-    //======== independent GPU testing routine: saxpy ========
-    //========================================================
-    /*
-    printf("========================================================================================\n");
-    printf("start testing the GPU devices...\n");
-
-    int deviceCount;
-    checkCudaErrors(cudaGetDeviceCount(&deviceCount));
-    printf("DevicecheckCudaErrors Count: %d\n", deviceCount);
-
-    //int deviceID = findCudaDevice(argc, argv);
-    int deviceID = 0;
-    cudaDeviceProp prop;
-    checkCudaErrors(cudaGetDeviceProperties(&prop, deviceID));
-    if (prop.major < 2)
-    {
-        printf("Quit: current GPU device has compute SM%d.%d, Exiting...", prop.major, prop.minor);
-        exit(EXIT_WAIVED);
-    }
-
-    printf("Device %d: \"%s\" with Compute %d.%d capability\n",
-           deviceID, prop.name, prop.major, prop.minor);
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-    //==== memory allocating
-    int N1 = 1<<20;
-    cout << N1 << endl;
-    float *x, *y, *d_x, *d_y;
-
-    x = (float*)malloc(N1*sizeof(float));
-    y = (float*)malloc(N1*sizeof(float));
-
-    checkCudaErrors(cudaMalloc(&d_x, N1*sizeof(float)));
-    checkCudaErrors(cudaMalloc(&d_y, N1*sizeof(float)));
-
-    for (int i = 0; i < N1; i++)
-    {
-        x[i] = 1.0f;
-        y[i] = 2.0f;
-    }
-
-    checkCudaErrors(cudaMemcpy(d_x, x, N1*sizeof(float), cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(d_y, y, N1*sizeof(float), cudaMemcpyHostToDevice));
-
-
-    //==== Perform SAXPY on 1M elements
-    //saxpy<<<(N1+255)/256, 256>>>(N1, 2.0f, d_x, d_y);     // the classical one
-    saxpy<<<(N1+255)/256, 256>>>(N1, 2.0f, d_x, d_y);
-
-    checkCudaErrors(cudaMemcpy(y, d_y, N1*sizeof(float), cudaMemcpyDeviceToHost));
-
-    float maxError = 0.0f;
-    for(int i = 0; i < N1; i++)
-    maxError = max(maxError, abs(y[i]-4.0f));
-    printf("Max error (saxpy): %f\n", maxError);
-
-    free(x);
-    free(y);
-    checkCudaErrors(cudaFree(d_x));
-    checkCudaErrors(cudaFree(d_y));
-
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    checkCudaErrors(cudaDeviceReset());
-    printf("========================================================================================\n");
-	*/
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("aggre: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
@@ -863,46 +709,16 @@ void forward_backward_prop_batch(string etissue, int pos_start, int num_esample)
 
 
 
-
-
-
-
-
-
-	//============== timing starts ================
-    gettimeofday(&time_start, NULL);
-
 	//===================================== Regularization in Regression =====================================
 	// NOTE: not yet tested, but this is too straightforward to test
 	regularization(etissue_index);
 
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("regularization: Time used totally is %f seconds.\n", diff);
 
 
-
-
-
-
-
-	//============== timing starts ================
-    gettimeofday(&time_start, NULL);
 
 	//=========================================== Gradient Descent ===========================================
 	// NOTE: this routine is tested to be correct (Apr.25)
 	gradient_descent(etissue_index);
-
-	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("gd: Time used totally is %f seconds.\n", diff);
-
-
-
-
-
 
 
 
@@ -937,16 +753,6 @@ void forward_backward(int etissue_index,
 	Matrix matrix_para_dev_batch_hidden_gene
 	)
 {
-
-
-
-
-	// DEBUG
-	int deviceID = 1;
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-
-
 
 
 
@@ -1010,6 +816,16 @@ void forward_backward(int etissue_index,
 	struct timeval time_end;
 	double diff;
 
+	// temp variables for GPU timing:
+	// Allocate CUDA events that we'll use for timing
+	cudaEvent_t start;
+	cudaEventCreate(&start);
+	cudaEvent_t stop;
+	cudaEventCreate(&stop);
+	float msecTotal = 0.0f;
+
+
+
 
 
 
@@ -1037,12 +853,12 @@ void forward_backward(int etissue_index,
 	*/
 
 	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
-
-	//===============================================
-	//================ GPU computing ================
-	//===============================================
+	//========================================================
+	//================ GPU computing (naive1) ================
+	//========================================================
 	//== multiply the input to the matrix
 	gpu_matrix_mul_cis_mul<<<( num_para_cis+255)/256 , 256 >>>( num_para_cis, num_gene, d_snp, d_list_para_cis_gene[etissue_index], d_temp_cis_gene,\
 							d_cis_para_start, d_cis_para_amount, d_cis_snp_start, d_cis_para_index1);
@@ -1160,9 +976,14 @@ void forward_backward(int etissue_index,
 	*/
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("cis: Time used totally is %f seconds.\n", diff);
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cis: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
@@ -1198,9 +1019,57 @@ void forward_backward(int etissue_index,
 	*/
 
 
-	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
 
+
+	/*
+	cout << "test ..." << endl;
+	//========================================================================
+	// May.17: take a middle, do CPU computation, and transmit results to GPU
+	//========================================================================
+	//==== transmit data and para back from GPU
+	//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
+	dimension1 = matrix_para_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_snp_cellenv.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_snp_cellenv.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+	//vector<Matrix> cube_para_cellenv_gene --> <float *> d_list_para_cellenv_gene
+	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
+	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
+	for(long int i=0; i<dimension1; i++)
+	{
+		float * x = cube_para_cellenv_gene[etissue_index].get_list(i);
+		long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_list_para_cellenv_gene[etissue_index] + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+	}
+
+	//==== do CPU computation
+	// from snp to cell env variables
+	float * expr_con_pointer_cellenv = (float *)calloc( num_gene, sizeof(float) );
+	multi_array_list_matrix(dosage_list_pointer, matrix_para_snp_cellenv, cellenv_con_pointer);
+	//$$$$$$$$$$$ perform the activation function here (logistic or something else) $$$$$$$$$$$$
+	neuralnet_ac_func(cellenv_con_pointer, num_cellenv);
+	// from cell env variables to genes
+	multi_array_matrix(cellenv_con_pointer, cube_para_cellenv_gene[etissue_index], expr_con_pointer_cellenv);
+
+	//==== transmit results back to GPU
+	checkCudaErrors(cudaMemcpy( d_gene_rpkm_exp_cellenv, expr_con_pointer_cellenv, num_gene*sizeof(float), cudaMemcpyHostToDevice));
+	free(expr_con_pointer_cellenv);
+	*/
+
+
+
+
+
+	//============== timing starts ================
+    // Record the start event
+	cudaEventRecord(start, NULL);
+
+
+	/*
 	//===============================================
 	//================ GPU computing ================ (Apr.27, has been debugged, for both MM and neural hidden layer)
 	//===============================================
@@ -1215,45 +1084,84 @@ void forward_backward(int etissue_index,
 	gpu_matrix_mul_mul<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( dimension1, dimension2, d_snp, d_para_snp_cellenv, d_temp_snp_cellenv);
 	//== sum matrix
 	gpu_matrix_mul_add<<<(dimension1 + 255) / 256 , 256 >>>( dimension1, dimension2, d_temp_snp_cellenv, d_cellenv_hidden_var);
+	*/
+
+
+
+	// TESTING (the new MatrixMul methods)
+	//==== from SNP to cellenv
+	dimension1 = matrix_para_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_snp_cellenv.get_dimension2();
+	int BLOCK_SIZE = 32;
+	long int WC = 1;
+	long int HC = num_cellenv;
+    // setup execution parameters
+    //dim3 threads = dim3(1, BLOCK_SIZE);		// NOTE: the time increases from 60 msecs to 93.234 msecs after this
+    											// NOTE: it seems that two-dimension structure makes things faster
+	dim3 threads = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    //grid = dim3( ( WC + threads.x - 1 )/threads.x, ( HC + threads.y - 1 )/threads.y );
+    // NOTE: I will make the testing dummy
+	dim3 grid = dim3( ( WC + threads.x - 1 )/threads.x, ( HC + threads.y - 1 )/threads.y );
+
+    // naive implementation
+    matrixMul_naive<<< grid, threads >>>(d_cellenv_hidden_var, d_para_snp_cellenv, d_snp, dimension1, dimension2, 1);
+
+
+	//============== timing ends ================
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cellenv (huge MM): Time used totally is %.3f msec.\n", msecTotal);
+
+
+
+
+	//============== timing starts ================
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 
 	// The problem is in the above routine !!! --> I applied more blocks in a grid that's more than allowed
 
-	/*
-	dimension1 = matrix_para_snp_cellenv.get_dimension1();
-	dimension2 = matrix_para_snp_cellenv.get_dimension2();
-    for(long int i=0; i<dimension1; i++)
-    {
-    	float * x = matrix_para_snp_cellenv.get_list(i);
-    	long int pos_start = i * dimension2;
-		checkCudaErrors(cudaMemcpy(x, (d_para_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
-    }
 
-    float * list_snp = (float *)malloc(num_snp*sizeof(float));
-	checkCudaErrors(cudaMemcpy(list_snp, d_snp, num_snp*sizeof(float), cudaMemcpyDeviceToHost));
+	// dimension1 = matrix_para_snp_cellenv.get_dimension1();
+	// dimension2 = matrix_para_snp_cellenv.get_dimension2();
+ //    for(long int i=0; i<dimension1; i++)
+ //    {
+ //    	float * x = matrix_para_snp_cellenv.get_list(i);
+ //    	long int pos_start = i * dimension2;
+	// 	checkCudaErrors(cudaMemcpy(x, (d_para_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+ //    }
 
-    float * list_temp = (float *)malloc(num_cellenv*sizeof(float));
-	for(int i=0; i<dimension1; i++)
-	{
-		list_temp[i] = 0;
-		for(int j=0; j<dimension2; j++)
-		{
-			if(j == dimension2-1)		// the intercept
-			{
-				float para = matrix_para_snp_cellenv.get(i, j);
-				list_temp[i] += 1 * para;
-				break;
-			}
+ //    float * list_snp = (float *)malloc(num_snp*sizeof(float));
+	// checkCudaErrors(cudaMemcpy(list_snp, d_snp, num_snp*sizeof(float), cudaMemcpyDeviceToHost));
 
-			float para = matrix_para_snp_cellenv.get(i, j);
-			list_temp[i] += list_snp[j] * para;
-		}
-	}
-	sprintf(filename, "%s", "../result_tempdata/var_cellenv_before_normal.txt");
-	para_temp_save_var(list_temp, num_cellenv, filename);
-	free(list_snp);
-	free(list_temp);
-	*/
+ //    float * list_temp = (float *)malloc(num_cellenv*sizeof(float));
+	// for(int i=0; i<dimension1; i++)
+	// {
+	// 	list_temp[i] = 0;
+	// 	for(int j=0; j<dimension2; j++)
+	// 	{
+	// 		if(j == dimension2-1)		// the intercept
+	// 		{
+	// 			float para = matrix_para_snp_cellenv.get(i, j);
+	// 			list_temp[i] += 1 * para;
+	// 			break;
+	// 		}
+
+	// 		float para = matrix_para_snp_cellenv.get(i, j);
+	// 		list_temp[i] += list_snp[j] * para;
+	// 	}
+	// }
+	// sprintf(filename, "%s", "../result_tempdata/var_cellenv_before_normal.txt");
+	// para_temp_save_var(list_temp, num_cellenv, filename);
+	// free(list_snp);
+	// free(list_temp);
+		
 
 	
 	/*
@@ -1315,9 +1223,20 @@ void forward_backward(int etissue_index,
 	*/
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("cellenv: Time used totally is %f seconds.\n", diff);
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cellenv: Time used totally is %.3f msec.\n", msecTotal);
+	
+
+
+
+
+
 
 
 
@@ -1355,7 +1274,8 @@ void forward_backward(int etissue_index,
 
 
 	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -1454,10 +1374,14 @@ void forward_backward(int etissue_index,
 	*/
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("batch: Time used totally is %f seconds.\n", diff);
-
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("batch: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
@@ -1512,7 +1436,8 @@ void forward_backward(int etissue_index,
 
 
 	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 	//==========================================================================
 	//================ GPU computing (without data transfering) ================
@@ -1539,9 +1464,17 @@ void forward_backward(int etissue_index,
 	*/
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("merge: Time used totally is %f seconds.\n", diff);
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("merge: Time used totally is %.3f msec.\n", msecTotal);
+
+
+
 
 
 
@@ -1554,6 +1487,9 @@ void forward_backward(int etissue_index,
 	//###########################################################
 	//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 	//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
+
 
 
 
@@ -1582,8 +1518,9 @@ void forward_backward(int etissue_index,
 	backward_error_prop_direct_imcomp(matrix_imcomp_para_dev_cis_gene, error_list, dosage_list_pointer);
 	*/
 
-	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
+	// //============== timing starts ================
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -1592,9 +1529,17 @@ void forward_backward(int etissue_index,
 						d_cis_para_start, d_cis_para_amount, d_cis_snp_start, d_cis_para_index1);
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("cis: Time used totally is %f seconds.\n", diff);
+	// Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cis: Time used totally is %.3f msec.\n", msecTotal);
+
+
+
 
 
 
@@ -1611,8 +1556,100 @@ void forward_backward(int etissue_index,
 	backward_error_prop_inter_layer_1(error_list, cube_para_cellenv_gene[etissue_index], matrix_para_dev_snp_cellenv, cellenv_con_pointer, dosage_list_pointer);
 	*/
 
+
+	/*
+	///////// passway#2 CPU local test (passed)
+
+	// I need the following:
+    checkCudaErrors(cudaMemcpy( cellenv_con_pointer, d_cellenv_hidden_var, num_cellenv*sizeof(float), cudaMemcpyDeviceToHost));
+
+
+	cout << "test ..." << endl;
+	//========================================
+	// test the local CPU computation version
+	//========================================
+	//==== transmit stuff back from GPU; do the following:
+	// matrix_para_dev_cellenv_gene
+	// error_list
+	// //cellenv_con_pointer
+	// cube_para_cellenv_gene[etissue_index]
+	// matrix_para_dev_snp_cellenv
+	// //cellenv_con_pointer
+	// //dosage_list_pointer
+	//vector<Matrix> cube_para_cellenv_gene --> <float *> d_list_para_cellenv_gene
+	dimension1 = matrix_para_dev_cellenv_gene.get_dimension1();
+	dimension2 = matrix_para_dev_cellenv_gene.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_cellenv_gene.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_list_para_dev_cellenv_gene[etissue_index] + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+	float * error_list = (float *)malloc(num_gene*sizeof(float));
+	checkCudaErrors(cudaMemcpy(error_list, d_error_list, num_gene*sizeof(float), cudaMemcpyDeviceToHost));
+
+	//vector<Matrix> cube_para_cellenv_gene --> <float *> d_list_para_cellenv_gene
+	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
+	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = cube_para_cellenv_gene[etissue_index].get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_list_para_cellenv_gene[etissue_index] + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+	//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
+	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_snp_cellenv.get_list(i);
+    	long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy(x, (d_para_dev_snp_cellenv + pos_start), dimension2*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+
+	//==== CPU computing
+	//// from cell env to genes
+	backward_error_prop_last_layer(matrix_para_dev_cellenv_gene, error_list, cellenv_con_pointer);
+	//// from snp to cell env
+	backward_error_prop_inter_layer_1(error_list, cube_para_cellenv_gene[etissue_index], matrix_para_dev_snp_cellenv, cellenv_con_pointer, dosage_list_pointer);
+
+
+	//==== transmit stuff again into GPU; do the following:
+	// matrix_para_dev_cellenv_gene
+	// matrix_para_dev_snp_cellenv
+	//matrix_para_snp_cellenv --> float * d_para_snp_cellenv
+	dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
+	for(long int i=0; i<dimension1; i++)
+	{
+		float * x = matrix_para_dev_snp_cellenv.get_list(i);
+		long int pos_start = i * dimension2;
+		checkCudaErrors(cudaMemcpy( (d_para_dev_snp_cellenv + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
+    }
+
+	//vector<Matrix> cube_para_cellenv_gene --> vector<float *> d_list_para_cellenv_gene
+	dimension1 = matrix_para_dev_cellenv_gene.get_dimension1();
+	dimension2 = matrix_para_dev_cellenv_gene.get_dimension2();
+    for(long int i=0; i<dimension1; i++)
+    {
+    	float * x = matrix_para_dev_cellenv_gene.get_list(i);
+    	long int pos_start = i * dimension2;
+    	checkCudaErrors(cudaMemcpy( (d_list_para_dev_cellenv_gene[etissue_index] + pos_start), x, dimension2*sizeof(float), cudaMemcpyHostToDevice));
+    }
+
+	free(error_list);
+	*/
+
+
+
+
+
 	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -1620,8 +1657,24 @@ void forward_backward(int etissue_index,
 	//==== from cellenv to gene expression (last layer)
 	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
 	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
-	float * d_para_dev_cellenv_gene = d_list_para_dev_cellenv_gene[etissue_index];
-	gpu_backprop_last_layer<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_para_dev_cellenv_gene, d_error_list, d_cellenv_hidden_var);
+	gpu_backprop_last_layer<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_list_para_dev_cellenv_gene[etissue_index], d_error_list, d_cellenv_hidden_var);
+
+
+	//============== timing ends ================
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cellenv (last layer): Time used totally is %.3f msec.\n", msecTotal);
+
+
+
+	//============== timing starts ================
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 	//==== from SNP to cellenv (first layer)
 	// 1. calculate the temp list (saved into hidden variables)
@@ -1630,23 +1683,84 @@ void forward_backward(int etissue_index,
 	//
 	dimension1 = cube_para_cellenv_gene[etissue_index].get_dimension1();
 	dimension2 = cube_para_cellenv_gene[etissue_index].get_dimension2();
-	gpu_backprop_error_prop<<<( num_cellenv + 255 )/256 , 256 >>>( dimension1, dimension2, d_list_para_cellenv_gene[etissue_index], d_error_list, d_cellenv_hidden_var);
+	gpu_backprop_error_prop<<<( num_cellenv + 255 )/256 , 256 >>>( dimension1, dimension2, d_list_para_cellenv_gene[etissue_index], d_error_list, d_cellenv_hidden_var_backerror);
+
+	//============== timing ends ================
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cellenv (error prop): Time used totally is %.3f msec.\n", msecTotal);
+
+
+
+	//============== timing starts ================
+    // Record the start event
+	cudaEventRecord(start, NULL);
+
+	// NOTE: this is not just logistic dev; it's combined with the propogated errors
+	gpu_neuralnet_ac_func_dev_error<<<( num_cellenv + 255 )/256 , 256 >>>( num_cellenv, d_cellenv_hidden_var, d_cellenv_hidden_var_backerror);
 	//
-	gpu_neuralnet_ac_func_dev<<<( num_cellenv + 255 )/256 , 256 >>>( num_cellenv, d_cellenv_hidden_var);
-	//
+
+	//============== timing ends ================
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cellenv (neural net): Time used totally is %.3f msec.\n", msecTotal);
+
+
+	//============== timing starts ================
+	// Record the start event
+	cudaEventRecord(start, NULL);
+
+
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
 	//gpu_backprop_last_layer<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
 	//==============================================
-	// NOTE: maximum number of blocks in a grid !!!
+	//NOTE: maximum number of blocks in a grid !!!
 	//==============================================
-	gpu_backprop_last_layer<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+	//gpu_backprop_last_layer_snp<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+
+
+
+	// TEST: two-dimension GPU structure (this seems to be better, from 17.355 msecs to 5.773 msecs)
+	BLOCK_SIZE = 32;
+    // setup execution parameters
+	threads = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    //grid = dim3( ( WC + threads.x - 1 )/threads.x, ( HC + threads.y - 1 )/threads.y );
+    // NOTE: I will make the testing dummy
+	grid = dim3( ( dimension2 + threads.x - 1 )/threads.x, ( dimension1 + threads.y - 1 )/threads.y );
+	// naive implementation (without deep optimization)
+	gpu_backprop_last_layer_snp_2D<<< grid, threads >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+
 
 
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("cellenv: Time used totally is %f seconds.\n", diff);
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("cellenv (last layer): Time used totally is %.3f msec.\n", msecTotal);
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1665,7 +1779,8 @@ void forward_backward(int etissue_index,
 	*/
 
 	//============== timing starts ================
-	gettimeofday(&time_start, NULL);
+    // Record the start event
+	cudaEventRecord(start, NULL);
 
 	//===============================================
 	//================ GPU computing ================
@@ -1681,18 +1796,27 @@ void forward_backward(int etissue_index,
 	//
 	dimension1 = matrix_para_batch_hidden_gene.get_dimension1();
 	dimension2 = matrix_para_batch_hidden_gene.get_dimension2();
-	gpu_backprop_error_prop<<<( num_batch_hidden + 255 )/256 , 256 >>>( dimension1, dimension2, d_para_batch_hidden_gene, d_error_list, d_batch_hidden_var);
+	gpu_backprop_error_prop<<<( num_batch_hidden + 255 )/256 , 256 >>>( dimension1, dimension2, d_para_batch_hidden_gene, d_error_list, d_batch_hidden_var_backerror);
 	//
-	gpu_neuralnet_ac_func_dev<<<( num_batch_hidden + 255 )/256 , 256 >>>( num_batch_hidden, d_batch_hidden_var);
+	//gpu_neuralnet_ac_func_dev<<<( num_batch_hidden + 255 )/256 , 256 >>>( num_batch_hidden, d_batch_hidden_var);
+	// NOTE: this is not just logistic dev; it's combined with the propogated errors
+	gpu_neuralnet_ac_func_dev_error<<<( num_batch_hidden + 255 )/256 , 256 >>>( num_batch_hidden, d_batch_hidden_var, d_batch_hidden_var_backerror);
 	//
 	dimension1 = matrix_para_batch_batch_hidden.get_dimension1();
 	dimension2 = matrix_para_batch_batch_hidden.get_dimension2();
 	gpu_backprop_last_layer<<<( (dimension1*dimension2)+255)/256 , 256 >>>( dimension1, dimension2, d_para_dev_batch_batch_hidden, d_batch_hidden_var, d_batch_var);
 
+
 	//============== timing ends ================
-	gettimeofday(&time_end, NULL);
-	diff = (double)(time_end.tv_sec-time_start.tv_sec) + (double)(time_end.tv_usec-time_start.tv_usec)/1000000;
-	printf("batch: Time used totally is %f seconds.\n", diff);
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("batch: Time used totally is %.3f msec.\n", msecTotal);
+
 
 
 
@@ -1711,21 +1835,6 @@ void forward_backward(int etissue_index,
 
 void regularization(int etissue_index)
 {
-
-
-
-
-
-	// DEBUG
-	int deviceID = 1;
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-
-
-
-
-
-
 
 	cout << "[@@] entering the regularization routine..." << endl;
 
@@ -1870,6 +1979,16 @@ void regularization(int etissue_index)
 
 
 
+
+	//============== timing starts ================
+	// Allocate CUDA events that we'll use for timing
+	cudaEvent_t start;
+	cudaEventCreate(&start);
+	cudaEvent_t stop;
+	cudaEventCreate(&stop);
+	// Record the start event
+	cudaEventRecord(start, NULL);
+
 	//=======================================
 	//============ GPU Computing ============
 	//=======================================
@@ -1878,7 +1997,11 @@ void regularization(int etissue_index)
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-	gpu_penalty<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv, d_para_dev_snp_cellenv, lambda_snp_cellenv, sigma);
+	//gpu_penalty<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv, d_para_dev_snp_cellenv, lambda_snp_cellenv, sigma);
+	//==============================================
+	// NOTE: maximum number of blocks in a grid !!!
+	//==============================================
+	gpu_penalty<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( (dimension1*dimension2) , d_para_snp_cellenv, d_para_dev_snp_cellenv, lambda_snp_cellenv, sigma);
 
 	//vector<Matrix> cube_para_dev_cellenv_gene --> vector<float *> d_list_para_dev_cellenv_gene
 	dimension1 = cube_para_dev_cellenv_gene[etissue_index].get_dimension1();
@@ -1897,7 +2020,16 @@ void regularization(int etissue_index)
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
 	gpu_penalty<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_batch_hidden_gene, d_para_dev_batch_hidden_gene, lambda_batch_hidden_gene, sigma);
 
-
+	//============== timing ends ================
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+    float msecTotal = 0.0f;
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("regularization: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
@@ -1914,17 +2046,6 @@ void regularization(int etissue_index)
 void gradient_descent(int etissue_index)
 {
 	cout << "[@@] entering the gradient descent..." << endl;
-
-
-
-
-	// DEBUG
-	int deviceID = 1;
-    checkCudaErrors(cudaSetDevice(deviceID));
-
-
-
-
 
 
 	/*
@@ -1963,6 +2084,15 @@ void gradient_descent(int etissue_index)
 
 
 
+	//============== timing starts ================
+	// Allocate CUDA events that we'll use for timing
+	cudaEvent_t start;
+	cudaEventCreate(&start);
+	cudaEvent_t stop;
+	cudaEventCreate(&stop);
+    // Record the start event
+	cudaEventRecord(start, NULL);
+
 	//===============================================
 	//================ GPU computing ================
 	//===============================================
@@ -1971,7 +2101,11 @@ void gradient_descent(int etissue_index)
 	//matrix_para_dev_snp_cellenv --> float * d_para_dev_snp_cellenv
 	long int dimension1 = matrix_para_dev_snp_cellenv.get_dimension1();
 	long int dimension2 = matrix_para_dev_snp_cellenv.get_dimension2();
-	gpu_gd<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv, d_para_dev_snp_cellenv, rate_learner);
+	//gpu_gd<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_snp_cellenv, d_para_dev_snp_cellenv, rate_learner);
+	//==============================================
+	// NOTE: maximum number of blocks in a grid !!!
+	//==============================================
+	gpu_gd<<<( (dimension1*dimension2)+1023)/1024 , 1024 >>>( (dimension1*dimension2) , d_para_snp_cellenv, d_para_dev_snp_cellenv, rate_learner);
 
 	//vector<Matrix> cube_para_dev_cellenv_gene --> vector<float *> d_list_para_dev_cellenv_gene
 	dimension1 = cube_para_dev_cellenv_gene[etissue_index].get_dimension1();
@@ -1990,7 +2124,16 @@ void gradient_descent(int etissue_index)
 	dimension2 = matrix_para_dev_batch_hidden_gene.get_dimension2();
 	gpu_gd<<<( (dimension1*dimension2)+255)/256 , 256 >>>( (dimension1*dimension2) , d_para_batch_hidden_gene, d_para_dev_batch_hidden_gene, rate_learner);
 
-
+	//============== timing ends ================
+    // Record the stop event
+	cudaEventRecord(stop, NULL);
+    // Wait for the stop event to complete
+	cudaEventSynchronize(stop);
+	// Timing
+    float msecTotal = 0.0f;
+	cudaEventElapsedTime(&msecTotal, start, stop);
+    // Compute and print the performance
+	printf("gd: Time used totally is %.3f msec.\n", msecTotal);
 
 
 
@@ -2005,7 +2148,16 @@ void gradient_descent(int etissue_index)
 
 
 
-
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+//#############################################
+//=============================================
+// below are loglike and testerror relevant
+// not counted toward the speed testing
+//=============================================
+//#############################################
+//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 
 
@@ -2019,7 +2171,7 @@ void gradient_descent(int etissue_index)
 // calculate the loglikelihood for all the samples in one tissue
 float cal_loglike(string etissue)
 {
-	cout << "now calculating the log-likelihood..." << endl;
+	cout << "[@@] now calculating the log-likelihood..." << endl;
 
 	float loglike = 0;
 	loglike = forward_loglike_testerror(0, etissue, &snp_dosage_list, gene_rpkm_exp, cellenv_hidden_var, batch_var, batch_hidden_var);	// indicator=0 --> loglike; indicator=1 --> testerror
@@ -2069,7 +2221,7 @@ float forward_loglike_testerror(int indicator, string etissue, array<float *, NU
 			esample = esample_tissue_rep_test[etissue][pos];
 		}
 		string individual = sample_to_individual(esample);
-		cout << "======== current sample #" << pos+1 << ": " << esample << endl;
+		//cout << "======== current sample #" << pos+1 << ": " << esample << endl;
 
 
 		int snp_index = d_snp_index_map[individual];
@@ -2221,7 +2373,7 @@ float forward_loglike_testerror(int indicator, string etissue, array<float *, NU
 // type: MAE or AE (mean absolute error or absolute error)
 float cal_testerror(string etissue)
 {
-	cout << "now calculating the testing error (for the current tissue)..." << endl;
+	cout << "[@@] now calculating the testing error (for the current tissue)..." << endl;
 
 	float testerror = 0;
 	testerror = forward_loglike_testerror(1, etissue, &snp_dosage_list, gene_rpkm_exp, cellenv_hidden_var, batch_var, batch_hidden_var);	// indicator=0 --> loglike; indicator=1 --> testerror

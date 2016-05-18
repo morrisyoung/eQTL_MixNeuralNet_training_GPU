@@ -198,13 +198,27 @@ void gpu_neuralnet_ac_func(long int dimension, float * array)
 
 // this is the derivative of the above activation function
 __global__
-void gpu_neuralnet_ac_func_dev(long int dimension, float * array)
+void gpu_neuralnet_ac_func_dev(long int dimension, float * array1)
 {
 	long int i = blockIdx.x*blockDim.x + threadIdx.x;
     if(i < dimension)
     {
 		float tune = 0.01;  // original choice is 0.01
-		array[i] = tune * array[i] * (1 - array[i]);
+		array1[i] = tune * array1[i] * (1 - array1[i]);
+    }
+
+}
+
+
+// this is the derivative of the above activation function
+__global__
+void gpu_neuralnet_ac_func_dev_error(long int dimension, float * array1, float * array2)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if(i < dimension)
+    {
+		float tune = 0.01;  // original choice is 0.01
+		array1[i] = tune * array1[i] * (1 - array1[i]) * array2[i];
     }
 
 }
@@ -431,6 +445,23 @@ void gpu_backprop_last_layer(long int dimension1, long int dimension2, float * p
     	{
     		cellenv = hidden_var[index2];
     	}
+    	para_dev[i] += error * cellenv;
+	}
+
+}
+
+
+// the following is designed especially for snp list, which already contains the last intercept term
+__global__
+void gpu_backprop_last_layer_snp(long int dimension1, long int dimension2, float * para_dev, float * error_list, float * hidden_var)
+{
+	long int i = blockIdx.x*blockDim.x + threadIdx.x;
+	if(i < dimension1 * dimension2)
+	{
+    	long int index1 = i / dimension2;
+    	long int index2 = i % dimension2;
+    	float error = error_list[index1];
+    	float cellenv = hidden_var[index2];		// we do have the intercept term
     	para_dev[i] += error * cellenv;
 	}
 

@@ -539,6 +539,8 @@ void backward_error_prop_inter_layer_1(float * error_list, Matrix matrix_para_se
 
 
 
+
+
 // inter layer 2: first input layer is simply a list
 // pseudo: [ \sum w5 * (expected rpkm - real rpkm) ] * g'(w4 * x2) * x2
 void backward_error_prop_inter_layer_2(float * error_list, Matrix matrix_para_second, Matrix matrix_para_dev_first, float * hidden, float * input)
