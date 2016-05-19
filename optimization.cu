@@ -107,6 +107,9 @@ float * d_gene_rpkm_exp_cis;		// with length "num_gene"
 float * d_gene_rpkm_exp_cellenv;  	// with length "num_gene"
 float * d_gene_rpkm_exp_batch;  	// with length "num_gene"
 float * d_error_list;				// with length "num_gene"
+int L;								// the length of sub-matrix
+int num_block;
+float * d_cellenv_hidden_var_sub;	// with length "num_cellenv * num_block"
 float * d_cellenv_hidden_var;  		// with length "num_cellenv"
 float * d_cellenv_hidden_var_backerror;  		// with length "num_cellenv"
 float * d_batch_var;  				// with length "num_batch"
@@ -908,6 +911,20 @@ void GPU_init()
 	//==== float * d_error_list
 	checkCudaErrors(cudaMalloc(&d_error_list, num_gene*sizeof(float)));
 
+
+
+	// NOTE: TODO
+	//==== int L;								// the length of sub-matrix
+	L = 10000;
+
+	//==== int num_block;
+	num_block = (num_snp + 1 + L - 1) / L;
+
+	//==== float * d_cellenv_hidden_var_sub;	// with length "num_cellenv * num_block"
+	checkCudaErrors(cudaMalloc(&d_cellenv_hidden_var_sub, (num_cellenv * num_block)*sizeof(float)));
+
+
+
 	//==== float * d_cellenv_hidden_var
 	checkCudaErrors(cudaMalloc(&d_cellenv_hidden_var, num_cellenv*sizeof(float)));
 
@@ -1256,6 +1273,9 @@ void GPU_release()
     //==== float * d_error_list
     checkCudaErrors(cudaFree(d_error_list));
 
+	//==== float * d_cellenv_hidden_var_sub
+    checkCudaErrors(cudaFree(d_cellenv_hidden_var_sub));
+
 	//==== float * d_cellenv_hidden_var
     checkCudaErrors(cudaFree(d_cellenv_hidden_var));
 
@@ -1437,11 +1457,21 @@ void optimize()
 				//
 
 
+				/*
+				if(count3 == 5)
+				{
+					break;
+				}
+				*/
+
+
 
 				int pos_start = (batch_size * count3) % (num_esample);
 				printf("[@@@] now we are working on %d iter_out (%d total), eTissue #%d (%d total) -- %s (%d training samples in), #%d mini-batch (%d batch size, rounding all samples).\n", count1+1, iter_learn_out, count2+1, num_etissue, etissue.c_str(), num_esample, count3+1, batch_size);
 				forward_backward_prop_batch(etissue, pos_start, num_esample);
 				// leaving this mini-batch
+
+
 
 
 

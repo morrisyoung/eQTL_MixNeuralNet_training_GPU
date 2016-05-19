@@ -80,6 +80,9 @@ extern float * d_gene_rpkm_exp_cis;		// with length "num_gene"
 extern float * d_gene_rpkm_exp_cellenv;  	// with length "num_gene"
 extern float * d_gene_rpkm_exp_batch;  	// with length "num_gene"
 extern float * d_error_list;				// with length "num_gene"
+extern int L;								// the length of sub-matrix
+extern int num_block;
+extern float * d_cellenv_hidden_var_sub;	// with length "num_cellenv * num_block"
 extern float * d_cellenv_hidden_var;  // with length "num_cellenv"
 extern float * d_cellenv_hidden_var_backerror;  // with length "num_cellenv"
 extern float * d_batch_var;  // with length "num_batch"

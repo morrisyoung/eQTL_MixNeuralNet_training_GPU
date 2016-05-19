@@ -811,6 +811,10 @@ void forward_backward(int etissue_index,
 
 	long int dimension1, dimension2;
 	long int pos_start;
+	int BLOCK_SIZE;
+	dim3 threads;
+	dim3 grid;
+
 	//============== timing ================
 	struct timeval time_start;
 	struct timeval time_end;
@@ -823,6 +827,8 @@ void forward_backward(int etissue_index,
 	cudaEvent_t stop;
 	cudaEventCreate(&stop);
 	float msecTotal = 0.0f;
+
+
 
 
 
@@ -1088,23 +1094,49 @@ void forward_backward(int etissue_index,
 
 
 
+
+	/*
 	// TESTING (the new MatrixMul methods)
 	//==== from SNP to cellenv
 	dimension1 = matrix_para_snp_cellenv.get_dimension1();
 	dimension2 = matrix_para_snp_cellenv.get_dimension2();
-	int BLOCK_SIZE = 32;
+	BLOCK_SIZE = 32;
 	long int WC = 1;
 	long int HC = num_cellenv;
     // setup execution parameters
     //dim3 threads = dim3(1, BLOCK_SIZE);		// NOTE: the time increases from 60 msecs to 93.234 msecs after this
     											// NOTE: it seems that two-dimension structure makes things faster
-	dim3 threads = dim3(BLOCK_SIZE, BLOCK_SIZE);
+	threads = dim3(BLOCK_SIZE, BLOCK_SIZE);
     //grid = dim3( ( WC + threads.x - 1 )/threads.x, ( HC + threads.y - 1 )/threads.y );
     // NOTE: I will make the testing dummy
-	dim3 grid = dim3( ( WC + threads.x - 1 )/threads.x, ( HC + threads.y - 1 )/threads.y );
+	grid = dim3( ( WC + threads.x - 1 )/threads.x, ( HC + threads.y - 1 )/threads.y );
 
     // naive implementation
     matrixMul_naive<<< grid, threads >>>(d_cellenv_hidden_var, d_para_snp_cellenv, d_snp, dimension1, dimension2, 1);
+    */
+
+
+
+
+
+	// TESTING (the new MatrixMul methods, with shared memory scheme)
+    // testing other algorithm (splitting the width of the huge matrix)
+    // motivation:
+    //	1. as each element in para matrix will only be loaded once, there is no need to preload
+	//	2. the bottleneck is the parallism of computing the super long matrix
+	// practice:
+	//	1. the dosage will be used several times, thus preloading into block should be good
+	//	2. each block (512) will deal with 400 lines, with length L
+	//	3. L will depend on how much memory needed for preloading these dosage data, and the max number of blocks applicable
+	dimension1 = matrix_para_snp_cellenv.get_dimension1();
+	dimension2 = matrix_para_snp_cellenv.get_dimension2();
+	matrixMul_upgrade_multi<<< num_block, 512 >>>(dimension1, dimension2, L, num_block, d_cellenv_hidden_var_sub, d_para_snp_cellenv, d_snp);
+	matrixMul_upgrade_sum<<< (num_cellenv+255)/256, 256 >>>(dimension1, num_block, d_cellenv_hidden_var_sub, d_cellenv_hidden_var);
+
+
+
+
+
 
 
 	//============== timing ends ================
@@ -1716,6 +1748,9 @@ void forward_backward(int etissue_index,
 	printf("cellenv (neural net): Time used totally is %.3f msec.\n", msecTotal);
 
 
+
+
+
 	//============== timing starts ================
 	// Record the start event
 	cudaEventRecord(start, NULL);
@@ -1740,6 +1775,16 @@ void forward_backward(int etissue_index,
 	grid = dim3( ( dimension2 + threads.x - 1 )/threads.x, ( dimension1 + threads.y - 1 )/threads.y );
 	// naive implementation (without deep optimization)
 	gpu_backprop_last_layer_snp_2D<<< grid, threads >>>( dimension1, dimension2, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+
+
+
+	/*
+	// the following routine increased the running time
+	// TEST: shared memory scheme
+	gpu_backprop_last_layer_snp_2D_sharedmem<<< grid, threads >>>( dimension1, dimension2, grid.x, grid.y, d_para_dev_snp_cellenv, d_cellenv_hidden_var, d_snp);
+	*/
+
+
 
 
 
